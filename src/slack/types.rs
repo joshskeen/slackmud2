@@ -87,3 +87,57 @@ impl Block {
         }
     }
 }
+
+/// Slack Events API callback event
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type")]
+pub enum EventWrapper {
+    #[serde(rename = "url_verification")]
+    UrlVerification { challenge: String },
+    #[serde(rename = "event_callback")]
+    EventCallback { event: Event },
+}
+
+/// Inner event types
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type")]
+pub enum Event {
+    #[serde(rename = "message")]
+    Message(MessageEvent),
+}
+
+/// Message event from Slack
+#[derive(Debug, Clone, Deserialize)]
+pub struct MessageEvent {
+    pub user: Option<String>,
+    pub text: String,
+    pub channel: String,
+    pub channel_type: String,
+    #[serde(default)]
+    pub bot_id: Option<String>,
+}
+
+impl MessageEvent {
+    /// Check if this is a DM (direct message)
+    pub fn is_dm(&self) -> bool {
+        self.channel_type == "im"
+    }
+
+    /// Check if message is from a bot (to avoid loops)
+    pub fn is_from_bot(&self) -> bool {
+        self.bot_id.is_some()
+    }
+
+    /// Parse command from message text
+    /// "look" -> ("look", "")
+    /// "attack goblin" -> ("attack", "goblin")
+    pub fn parse_command(&self) -> (&str, &str) {
+        let text = self.text.trim();
+        if let Some(space_idx) = text.find(' ') {
+            let (cmd, args) = text.split_at(space_idx);
+            (cmd, args.trim())
+        } else {
+            (text, "")
+        }
+    }
+}

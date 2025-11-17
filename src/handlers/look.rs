@@ -45,3 +45,62 @@ pub async fn handle_look(state: Arc<AppState>, command: SlashCommand) -> Result<
 
     Ok(())
 }
+
+/// Handle look command from DM
+pub async fn handle_look_dm(
+    state: Arc<AppState>,
+    user_id: String,
+    user_name: String,
+    _dm_channel: String,
+) -> Result<()> {
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+    let room_repo = RoomRepository::new(state.db_pool.clone());
+
+    // Get or create the player
+    let player = player_repo.get_or_create(user_id.clone(), user_name).await?;
+
+    // Check if player has a current channel
+    let channel_id = match player.current_channel_id {
+        Some(id) => id,
+        None => {
+            // Player hasn't been in any channel yet
+            state.slack_client.send_dm(
+                &user_id,
+                "You need to use `/mud look` in a channel first to establish your location!"
+            ).await?;
+            return Ok(());
+        }
+    };
+
+    // Get the room
+    let room = match room_repo.get_by_channel_id(&channel_id).await? {
+        Some(room) => room,
+        None => {
+            state.slack_client.send_dm(
+                &user_id,
+                "Your current location is unknown. Try using `/mud look` in a channel!"
+            ).await?;
+            return Ok(());
+        }
+    };
+
+    // Send private DM with room description to the user
+    let dm_text = format!(
+        "*You look around #{}*\n\n{}",
+        room.channel_name,
+        room.description
+    );
+
+    let blocks = vec![
+        Block::section(&format!("*You look around #{}*", room.channel_name)),
+        Block::section(&room.description),
+    ];
+
+    state.slack_client.send_dm_with_blocks(&user_id, &dm_text, blocks).await?;
+
+    // Post public message in the channel that the user looked around
+    let public_text = format!("_{} looks around the room carefully._", player.name);
+    state.slack_client.post_message(&channel_id, &public_text, None).await?;
+
+    Ok(())
+}

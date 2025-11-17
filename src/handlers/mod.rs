@@ -1,5 +1,8 @@
 mod look;
 mod character;
+mod events;
+
+pub use events::handle_events;
 
 use crate::AppState;
 use crate::slack::SlashCommand;
@@ -23,7 +26,7 @@ pub async fn handle_slash_command(
         command.channel_id
     );
 
-    let (subcommand, args) = command.parse_subcommand();
+    let (subcommand, _args) = command.parse_subcommand();
 
     let result = match subcommand {
         "look" | "l" => look::handle_look(state, command).await,

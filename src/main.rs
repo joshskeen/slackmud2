@@ -66,6 +66,7 @@ async fn main() -> Result<()> {
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/slack/commands", post(handlers::handle_slash_command))
+        .route("/slack/events", post(handlers::handle_events))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
