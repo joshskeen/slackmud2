@@ -33,8 +33,14 @@ pub async fn broadcast_room_action(
     let room_repo = RoomRepository::new(state.db_pool.clone());
     if let Some(room) = room_repo.get_by_channel_id(room_channel_id).await? {
         if let Some(attached_channel) = room.attached_channel_id {
-            // Post to the attached Slack channel (visible to anyone in that channel)
-            let _ = state.slack_client.post_message(&attached_channel, message, None).await;
+            // Post to the attached Slack channel with a subtle bot appearance
+            let _ = state.slack_client.post_message_with_username(
+                &attached_channel,
+                message,
+                None,
+                Some("mud".to_string()),
+                Some(":game_die:".to_string()),
+            ).await;
             // Ignore post errors to avoid failing the whole broadcast
         }
     }

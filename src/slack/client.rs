@@ -59,12 +59,21 @@ impl SlackClient {
         Ok(channel_id)
     }
 
-    /// Post a message to a channel
-    pub async fn post_message(&self, channel: &str, text: &str, blocks: Option<Vec<Block>>) -> Result<()> {
+    /// Post a message to a channel with optional custom username and icon
+    pub async fn post_message_with_username(
+        &self,
+        channel: &str,
+        text: &str,
+        blocks: Option<Vec<Block>>,
+        username: Option<String>,
+        icon_emoji: Option<String>,
+    ) -> Result<()> {
         let payload = PostMessageRequest {
             channel: channel.to_string(),
             text: text.to_string(),
             blocks,
+            username,
+            icon_emoji,
         };
 
         let response = self
@@ -83,6 +92,11 @@ impl SlackClient {
         }
 
         Ok(())
+    }
+
+    /// Post a message to a channel (uses default bot appearance)
+    pub async fn post_message(&self, channel: &str, text: &str, blocks: Option<Vec<Block>>) -> Result<()> {
+        self.post_message_with_username(channel, text, blocks, None, None).await
     }
 
     /// Post an ephemeral message (only visible to specific user)

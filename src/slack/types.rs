@@ -48,6 +48,10 @@ pub struct PostMessageRequest {
     pub text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blocks: Option<Vec<Block>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon_emoji: Option<String>,
 }
 
 /// Payload for posting an ephemeral message (only visible to one user)
