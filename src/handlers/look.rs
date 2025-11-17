@@ -10,12 +10,18 @@ use anyhow::Result;
 
 /// Handle look command from slash command
 pub async fn handle_look(state: Arc<AppState>, command: SlashCommand) -> Result<()> {
-    // Parse command to check for object argument
+    // Parse command to check for argument (player name or object name)
     let (_, args) = command.parse_subcommand();
     let args = args.trim();
 
-    // If there's an argument, look at that object
+    // If there's an argument, try looking at a player first, then object
     if !args.is_empty() {
+        // Try to look at a player
+        if let Ok(_) = handle_look_at_player(state.clone(), &command.user_id, args).await {
+            return Ok(());
+        }
+
+        // Fall back to looking at an object
         return handle_look_at_object(
             state,
             &command.user_id,
@@ -102,8 +108,14 @@ pub async fn handle_look_dm(
 ) -> Result<()> {
     let args = args.trim();
 
-    // If there's an argument, look at that object
+    // If there's an argument, try looking at a player first, then object
     if !args.is_empty() {
+        // Try to look at a player
+        if let Ok(_) = handle_look_at_player(state.clone(), &user_id, args).await {
+            return Ok(());
+        }
+
+        // Fall back to looking at an object
         return handle_look_at_object(
             state,
             &user_id,
@@ -371,6 +383,128 @@ async fn send_object_description(
     }
 
     state.slack_client.send_dm(user_id, &description).await?;
+
+    Ok(())
+}
+
+/// Handle looking at another player in the same room
+async fn handle_look_at_player(
+    state: Arc<AppState>,
+    viewer_id: &str,
+    target_name: &str,
+) -> Result<()> {
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+    let object_repo = ObjectRepository::new(state.db_pool.clone());
+    let object_instance_repo = ObjectInstanceRepository::new(state.db_pool.clone());
+
+    // Get viewer
+    let viewer_real_name = state.slack_client.get_user_real_name(viewer_id).await?;
+    let viewer = player_repo.get_or_create(viewer_id.to_string(), viewer_real_name).await?;
+
+    // Check if viewer has a current room
+    let viewer_room = match viewer.current_channel_id {
+        Some(id) => id,
+        None => {
+            state.slack_client.send_dm(
+                viewer_id,
+                "You need to be in a room first! Use `/mud look` in a channel to enter a room."
+            ).await?;
+            return Ok(());
+        }
+    };
+
+    // Find target player by partial name match in same room
+    let players_in_room = player_repo.get_players_in_room(&viewer_room).await?;
+    let target = players_in_room.iter()
+        .find(|p| p.name.to_lowercase().contains(&target_name.to_lowercase()))
+        .ok_or_else(|| anyhow::anyhow!("You don't see {} here.", target_name))?;
+
+    // Get target's class, race, and gender names
+    use crate::db::class::ClassRepository;
+    use crate::db::race::RaceRepository;
+
+    let class_repo = ClassRepository::new(state.db_pool.clone());
+    let race_repo = RaceRepository::new(state.db_pool.clone());
+
+    let class_name = if let Some(class_id) = target.class_id {
+        class_repo.get_by_id(class_id).await?
+            .map(|c| c.name)
+            .unwrap_or_else(|| "Unknown".to_string())
+    } else {
+        "Unknown".to_string()
+    };
+
+    let race_name = if let Some(race_id) = target.race_id {
+        race_repo.get_by_id(race_id).await?
+            .map(|r| r.name)
+            .unwrap_or_else(|| "Unknown".to_string())
+    } else {
+        "Unknown".to_string()
+    };
+
+    let gender_name = target.gender.as_deref().unwrap_or("neutral");
+
+    // Build player description
+    let mut description = String::new();
+
+    // Header with name, race, class, level
+    description.push_str(&format!(
+        "*{}* is a {} {} {}, level {}.\n\n",
+        target.name,
+        gender_name,
+        race_name.to_lowercase(),
+        class_name.to_lowercase(),
+        target.level
+    ));
+
+    // Health status (could be enhanced with actual health tracking)
+    description.push_str(&format!("{} is in excellent condition.\n\n", target.name));
+
+    // Get all equipped items
+    let equipped_instances = object_instance_repo.get_equipped(&target.slack_user_id).await?;
+
+    if !equipped_instances.is_empty() {
+        use crate::models::EquipmentSlot;
+
+        description.push_str(&format!("*{} is using:*\n", target.name));
+
+        // Display in slot order
+        for slot in EquipmentSlot::all_slots_in_order() {
+            let slot_str = slot.to_db_string();
+
+            // Find item in this slot
+            if let Some(instance) = equipped_instances.iter().find(|i| {
+                i.equipped_slot.as_ref().map(|s| s.as_str()) == Some(slot_str)
+            }) {
+                if let Some(object) = object_repo.get_by_vnum(instance.object_vnum).await? {
+                    description.push_str(&format!(
+                        "{:<20} {}\n",
+                        slot.display_label(),
+                        object.short_description
+                    ));
+                }
+            }
+        }
+        description.push_str("\n");
+    } else {
+        description.push_str(&format!("{} isn't wearing any equipment.\n\n", target.name));
+    }
+
+    // Show inventory (items carried but not equipped)
+    let inventory_instances = object_instance_repo
+        .get_in_player_inventory(&target.slack_user_id).await?;
+
+    if !inventory_instances.is_empty() {
+        description.push_str(&format!("*{} is carrying:*\n", target.name));
+        for instance in &inventory_instances {
+            if let Some(object) = object_repo.get_by_vnum(instance.object_vnum).await? {
+                description.push_str(&format!("• {}\n", object.short_description));
+            }
+        }
+    }
+
+    // Send to viewer
+    state.slack_client.send_dm(viewer_id, &description).await?;
 
     Ok(())
 }
