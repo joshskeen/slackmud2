@@ -8,13 +8,13 @@ use axum::{
     Router,
     routing::{get, post},
 };
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub struct AppState {
-    pub db_pool: SqlitePool,
+    pub db_pool: PgPool,
     pub slack_client: slack::SlackClient,
 }
 
@@ -33,7 +33,7 @@ async fn main() -> Result<()> {
     dotenv::dotenv().ok();
 
     let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "sqlite://slackmud.db".to_string());
+        .context("DATABASE_URL must be set")?;
     let slack_bot_token = std::env::var("SLACK_BOT_TOKEN")
         .context("SLACK_BOT_TOKEN must be set")?;
     let host = std::env::var("HOST")

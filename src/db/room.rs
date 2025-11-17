@@ -1,17 +1,17 @@
 use crate::models::Room;
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 
 pub struct RoomRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl RoomRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
     pub async fn get_by_channel_id(&self, channel_id: &str) -> Result<Option<Room>, sqlx::Error> {
-        sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE channel_id = ?")
+        sqlx::query_as::<_, Room>("SELECT * FROM rooms WHERE channel_id = $1")
             .bind(channel_id)
             .fetch_optional(&self.pool)
             .await
@@ -20,7 +20,7 @@ impl RoomRepository {
     pub async fn create(&self, room: &Room) -> Result<(), sqlx::Error> {
         sqlx::query(
             "INSERT INTO rooms (channel_id, channel_name, description, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?)"
+             VALUES ($1, $2, $3, $4, $5)"
         )
         .bind(&room.channel_id)
         .bind(&room.channel_name)
@@ -34,7 +34,7 @@ impl RoomRepository {
 
     pub async fn update_description(&self, channel_id: &str, description: &str) -> Result<(), sqlx::Error> {
         let now = chrono::Utc::now().timestamp();
-        sqlx::query("UPDATE rooms SET description = ?, updated_at = ? WHERE channel_id = ?")
+        sqlx::query("UPDATE rooms SET description = $1, updated_at = $2 WHERE channel_id = $3")
             .bind(description)
             .bind(now)
             .bind(channel_id)

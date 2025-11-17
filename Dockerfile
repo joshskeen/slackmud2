@@ -22,10 +22,11 @@ RUN touch src/main.rs && cargo build --release
 # Runtime stage
 FROM debian:bookworm-slim
 
-# Install runtime dependencies
+# Install runtime dependencies (including PostgreSQL client library)
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
+    libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -34,11 +35,7 @@ WORKDIR /app
 COPY --from=builder /app/target/release/slackmud /app/slackmud
 COPY --from=builder /app/migrations /app/migrations
 
-# Create directory for database
-RUN mkdir -p /app/data
-
-# Set environment variables
-ENV DATABASE_URL=sqlite:///app/data/slackmud.db
+# Set default environment variables (DATABASE_URL will be set by Render)
 ENV HOST=0.0.0.0
 ENV PORT=3000
 

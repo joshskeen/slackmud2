@@ -15,7 +15,7 @@ A Multi-User Dungeon (MUD) game server that integrates with Slack, written in Ru
 - **Rust**: High-performance, safe systems programming language
 - **Axum**: Modern async web framework for handling Slack webhooks
 - **SQLx**: Async SQL toolkit with compile-time query verification
-- **SQLite**: Lightweight, file-based database for game state
+- **PostgreSQL**: Robust relational database for persistent game state
 - **Reqwest**: HTTP client for Slack API calls
 
 ## Setup
@@ -23,6 +23,7 @@ A Multi-User Dungeon (MUD) game server that integrates with Slack, written in Ru
 ### Prerequisites
 
 - Rust 1.70+ ([Install Rust](https://rustup.rs/))
+- PostgreSQL 12+ ([Install PostgreSQL](https://www.postgresql.org/download/))
 - A Slack workspace where you can install apps
 - (Optional) Docker for deployment
 
@@ -54,19 +55,31 @@ A Multi-User Dungeon (MUD) game server that integrates with Slack, written in Ru
 ### 3. Local Development
 
 1. Clone this repository
-2. Copy `.env.example` to `.env`:
+
+2. Set up PostgreSQL database:
+   ```bash
+   # Create database
+   createdb slackmud
+
+   # Or using psql:
+   psql -c "CREATE DATABASE slackmud;"
+   ```
+
+3. Copy `.env.example` to `.env`:
    ```bash
    cp .env.example .env
    ```
-3. Edit `.env` and add your tokens:
+
+4. Edit `.env` and add your tokens:
    ```
    SLACK_BOT_TOKEN=xoxb-your-token-here
    SLACK_SIGNING_SECRET=your-signing-secret-here
-   DATABASE_URL=sqlite://slackmud.db
+   DATABASE_URL=postgresql://localhost/slackmud
    HOST=0.0.0.0
    PORT=3000
    ```
-4. Run the server:
+
+5. Run the server (migrations will run automatically):
    ```bash
    cargo run
    ```
@@ -84,15 +97,29 @@ Then update your Slack app's slash command URL to the ngrok URL.
 ### 4. Deploy to Render
 
 1. Push this code to a Git repository (GitHub, GitLab, etc.)
-2. Go to [render.com](https://render.com/) and create an account
-3. Click "New +" → "Web Service"
-4. Connect your repository
-5. Render will detect the `render.yaml` and `Dockerfile`
-6. Add environment variables in Render dashboard:
-   - `SLACK_BOT_TOKEN`: Your bot token
-   - `SLACK_SIGNING_SECRET`: Your signing secret
-7. Deploy!
-8. Update your Slack app's slash command URL to your Render URL
+
+2. Create PostgreSQL database on Render:
+   - Go to [render.com](https://render.com/) dashboard
+   - Click "New +" → "PostgreSQL"
+   - Name it `slackmud-database`
+   - Choose your plan and region
+   - Click "Create Database"
+   - Copy the "Internal Database URL" for the next step
+
+3. Create the web service:
+   - Click "New +" → "Web Service"
+   - Connect your repository
+   - Render will detect the `render.yaml` and `Dockerfile`
+
+4. Add environment variables in Render dashboard:
+   - `SLACK_BOT_TOKEN`: Your bot token from Slack app settings
+   - `SLACK_SIGNING_SECRET`: Your signing secret from Slack app settings
+   - `DATABASE_URL`: The Internal Database URL from step 2
+
+5. Deploy! Render will build and deploy your app
+
+6. Update your Slack app's slash command URL to your Render URL:
+   - Format: `https://your-app-name.onrender.com/slack/commands`
 
 ## Game Commands
 

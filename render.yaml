@@ -10,7 +10,7 @@ services:
       - key: SLACK_SIGNING_SECRET
         sync: false  # Set this manually in Render dashboard
       - key: DATABASE_URL
-        value: sqlite:///app/data/slackmud.db
+        sync: false  # Set to your PostgreSQL connection string from Render dashboard
       - key: HOST
         value: 0.0.0.0
       - key: PORT

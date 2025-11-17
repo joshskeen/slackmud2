@@ -1,18 +1,18 @@
 use crate::models::Player;
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 
 pub struct PlayerRepository {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl PlayerRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
     pub async fn get_by_slack_id(&self, slack_user_id: &str) -> Result<Option<Player>, sqlx::Error> {
         sqlx::query_as::<_, Player>(
-            "SELECT * FROM players WHERE slack_user_id = ?"
+            "SELECT * FROM players WHERE slack_user_id = $1"
         )
         .bind(slack_user_id)
         .fetch_optional(&self.pool)
@@ -22,7 +22,7 @@ impl PlayerRepository {
     pub async fn create(&self, player: &Player) -> Result<(), sqlx::Error> {
         sqlx::query(
             "INSERT INTO players (slack_user_id, name, level, experience_points, class_id, race_id, gender, current_channel_id, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"
         )
         .bind(&player.slack_user_id)
         .bind(&player.name)
@@ -43,9 +43,9 @@ impl PlayerRepository {
         let now = chrono::Utc::now().timestamp();
         sqlx::query(
             "UPDATE players
-             SET name = ?, level = ?, experience_points = ?, class_id = ?, race_id = ?,
-                 gender = ?, current_channel_id = ?, updated_at = ?
-             WHERE slack_user_id = ?"
+             SET name = $1, level = $2, experience_points = $3, class_id = $4, race_id = $5,
+                 gender = $6, current_channel_id = $7, updated_at = $8
+             WHERE slack_user_id = $9"
         )
         .bind(&player.name)
         .bind(player.level)
@@ -64,7 +64,7 @@ impl PlayerRepository {
     pub async fn update_current_channel(&self, slack_user_id: &str, channel_id: &str) -> Result<(), sqlx::Error> {
         let now = chrono::Utc::now().timestamp();
         sqlx::query(
-            "UPDATE players SET current_channel_id = ?, updated_at = ? WHERE slack_user_id = ?"
+            "UPDATE players SET current_channel_id = $1, updated_at = $2 WHERE slack_user_id = $3"
         )
         .bind(channel_id)
         .bind(now)
