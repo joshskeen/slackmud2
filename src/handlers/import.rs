@@ -318,7 +318,13 @@ pub async fn handle_vnums(state: Arc<AppState>, command: SlashCommand, args: &st
 
         // Extract vnum from channel_id (format: vnum_3001)
         let vnum_display = room.channel_id.strip_prefix("vnum_").unwrap_or(&room.channel_id);
-        message.push_str(&format!("• `{}` - {}\n", vnum_display, room.channel_name));
+
+        // Show attached channel if it exists
+        if let Some(ref attached_channel) = room.attached_channel_id {
+            message.push_str(&format!("• `{}` - {} [attached to <#{}>]\n", vnum_display, room.channel_name, attached_channel));
+        } else {
+            message.push_str(&format!("• `{}` - {}\n", vnum_display, room.channel_name));
+        }
     }
 
     if total_pages > 1 {
@@ -388,7 +394,13 @@ pub async fn handle_vnums_dm(
         }
 
         let vnum_display = room.channel_id.strip_prefix("vnum_").unwrap_or(&room.channel_id);
-        message.push_str(&format!("• `{}` - {}\n", vnum_display, room.channel_name));
+
+        // Show attached channel if it exists
+        if let Some(ref attached_channel) = room.attached_channel_id {
+            message.push_str(&format!("• `{}` - {} [attached to <#{}>]\n", vnum_display, room.channel_name, attached_channel));
+        } else {
+            message.push_str(&format!("• `{}` - {}\n", vnum_display, room.channel_name));
+        }
     }
 
     if total_pages > 1 {
