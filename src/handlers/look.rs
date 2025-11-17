@@ -6,26 +6,48 @@ use crate::models::Player;
 use std::sync::Arc;
 use anyhow::Result;
 
-/// Handle look command from slash command (may move player to new room)
+/// Handle look command from slash command
 pub async fn handle_look(state: Arc<AppState>, command: SlashCommand) -> Result<()> {
     let player_repo = PlayerRepository::new(state.db_pool.clone());
     let room_repo = RoomRepository::new(state.db_pool.clone());
 
     // Get or create the player
     let real_name = state.slack_client.get_user_real_name(&command.user_id).await?;
-    let mut player = player_repo.get_or_create(command.user_id.clone(), real_name).await?;
+    let player = player_repo.get_or_create(command.user_id.clone(), real_name).await?;
 
-    // Using /mud look in a channel moves you to that room
-    if player.current_channel_id.as_deref() != Some(&command.channel_id) {
-        player_repo.update_current_channel(&player.slack_user_id, &command.channel_id).await?;
-        player.current_channel_id = Some(command.channel_id.clone());
-    }
+    // Check if player has a current room
+    let channel_id = match player.current_channel_id {
+        Some(id) => id,
+        None => {
+            // First time player - set their room to where they used the command
+            player_repo.update_current_channel(&player.slack_user_id, &command.channel_id).await?;
 
-    // Get or create the room
-    let room = room_repo.get_or_create(
-        command.channel_id.clone(),
-        command.channel_name.clone(),
-    ).await?;
+            // Create the room if it doesn't exist
+            room_repo.get_or_create(
+                command.channel_id.clone(),
+                command.channel_name.clone(),
+            ).await?;
+
+            state.slack_client.send_dm(
+                &command.user_id,
+                &format!("Welcome to SlackMUD! You have entered #{}.", command.channel_name)
+            ).await?;
+
+            command.channel_id
+        }
+    };
+
+    // Get the room (player's current room)
+    let room = match room_repo.get_by_channel_id(&channel_id).await? {
+        Some(room) => room,
+        None => {
+            state.slack_client.send_dm(
+                &command.user_id,
+                "Your current location is unknown. This shouldn't happen!"
+            ).await?;
+            return Ok(());
+        }
+    };
 
     // Get all players in this room
     let players_in_room = player_repo.get_players_in_room(&room.channel_id).await?;
