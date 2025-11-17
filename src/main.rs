@@ -175,16 +175,9 @@ async fn load_default_areas(pool: &sqlx::PgPool) -> Result<()> {
     let room_repo = RoomRepository::new(pool.clone());
     let exit_repo = ExitRepository::new(pool.clone());
 
-    // Check if midgaard.are exists
-    let midgaard_path = "data/areas/midgaard.are";
-    if !tokio::fs::try_exists(midgaard_path).await.unwrap_or(false) {
-        tracing::info!("Midgaard area file not found at {}, skipping auto-import", midgaard_path);
-        return Ok(());
-    }
-
-    // Read the area file
-    let content = tokio::fs::read_to_string(midgaard_path).await
-        .context("Failed to read midgaard.are")?;
+    // Embed the midgaard.are file directly in the binary
+    const MIDGAARD_CONTENT: &str = include_str!("../data/areas/midgaard.are");
+    let content = MIDGAARD_CONTENT;
 
     // Parse the area file
     let area_file = parse_area_file(&content)
