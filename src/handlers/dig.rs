@@ -45,7 +45,7 @@ pub async fn handle_dig(state: Arc<AppState>, command: SlashCommand, args: &str)
     if parts.len() != 2 {
         state.slack_client.send_dm(
             &command.user_id,
-            "Usage: `/mud dig <direction> #channel`\nExample: `/mud dig north #tavern`\nValid directions: north, south, east, west, up, down"
+            "Usage: `/mud dig <direction> <target>`\nExamples:\n• `/mud dig north 3014` - link to virtual room\n• `/mud dig north #tavern` - link to Slack channel\nValid directions: north, south, east, west, up, down"
         ).await?;
         return Ok(());
     }
@@ -62,10 +62,15 @@ pub async fn handle_dig(state: Arc<AppState>, command: SlashCommand, args: &str)
         return Ok(());
     }
 
-    // Parse channel ID from #channel-name or C12345 format
-    let to_room_id = if target_channel.starts_with('#') {
-        // User provided #channel-name, we need to create/get the room
-        // For now, we'll use the channel name as ID (Slack will validate)
+    // Parse target: can be vnum, number, or #channel-name
+    let to_room_id = if target_channel.starts_with("vnum_") {
+        // User provided vnum_3014 format - link to virtual room
+        target_channel.to_string()
+    } else if target_channel.chars().all(|c| c.is_numeric()) {
+        // User provided just a number like 3014 - treat as vnum
+        format!("vnum_{}", target_channel)
+    } else if target_channel.starts_with('#') {
+        // User provided #channel-name - link to Slack channel
         target_channel.trim_start_matches('#').to_string()
     } else if target_channel.starts_with('C') || target_channel.starts_with('<') {
         // Direct channel ID or <#C12345|name> format
@@ -73,7 +78,7 @@ pub async fn handle_dig(state: Arc<AppState>, command: SlashCommand, args: &str)
     } else {
         state.slack_client.send_dm(
             &command.user_id,
-            "Please specify the target channel as #channel-name or channel ID"
+            "Please specify the target as:\n• A vnum: `3014` or `vnum_3014`\n• A Slack channel: `#channel-name`"
         ).await?;
         return Ok(());
     };
@@ -90,11 +95,27 @@ pub async fn handle_dig(state: Arc<AppState>, command: SlashCommand, args: &str)
         return Ok(());
     }
 
-    // Create or get the target room
-    let to_room = room_repo.get_or_create(
-        to_room_id.clone(),
-        target_channel.trim_start_matches('#').to_string(),
-    ).await?;
+    // Get or create the target room
+    let to_room = if to_room_id.starts_with("vnum_") {
+        // For virtual rooms, verify they exist (don't create)
+        match room_repo.get_by_channel_id(&to_room_id).await? {
+            Some(room) => room,
+            None => {
+                let vnum_display = to_room_id.strip_prefix("vnum_").unwrap_or(&to_room_id);
+                state.slack_client.send_dm(
+                    &command.user_id,
+                    &format!("Virtual room `{}` does not exist. Use `/mud vnums` to see available rooms.", vnum_display)
+                ).await?;
+                return Ok(());
+            }
+        }
+    } else {
+        // For regular channels, create if needed
+        room_repo.get_or_create(
+            to_room_id.clone(),
+            target_channel.trim_start_matches('#').to_string(),
+        ).await?
+    };
 
     // Create the exit
     let exit = Exit::new(from_room_id.clone(), direction.clone(), to_room.channel_id.clone(), Some(player.slack_user_id.clone()));
@@ -163,7 +184,7 @@ pub async fn handle_dig_dm(
     if parts.len() != 2 {
         state.slack_client.send_dm(
             &user_id,
-            "Usage: `dig <direction> #channel`\nExample: `dig north #tavern`\nValid directions: north, south, east, west, up, down"
+            "Usage: `dig <direction> <target>`\nExamples:\n• `dig north 3014` - link to virtual room\n• `dig north #tavern` - link to Slack channel\nValid directions: north, south, east, west, up, down"
         ).await?;
         return Ok(());
     }
@@ -180,15 +201,23 @@ pub async fn handle_dig_dm(
         return Ok(());
     }
 
-    // Parse channel
-    let to_room_id = if target_channel.starts_with('#') {
+    // Parse target: can be vnum, number, or #channel-name
+    let to_room_id = if target_channel.starts_with("vnum_") {
+        // User provided vnum_3014 format - link to virtual room
+        target_channel.to_string()
+    } else if target_channel.chars().all(|c| c.is_numeric()) {
+        // User provided just a number like 3014 - treat as vnum
+        format!("vnum_{}", target_channel)
+    } else if target_channel.starts_with('#') {
+        // User provided #channel-name - link to Slack channel
         target_channel.trim_start_matches('#').to_string()
     } else if target_channel.starts_with('C') || target_channel.starts_with('<') {
+        // Direct channel ID or <#C12345|name> format
         target_channel.trim_start_matches('<').trim_end_matches('>').split('|').next().unwrap_or(target_channel).to_string()
     } else {
         state.slack_client.send_dm(
             &user_id,
-            "Please specify the target channel as #channel-name"
+            "Please specify the target as:\n• A vnum: `3014` or `vnum_3014`\n• A Slack channel: `#channel-name`"
         ).await?;
         return Ok(());
     };
@@ -205,11 +234,27 @@ pub async fn handle_dig_dm(
         return Ok(());
     }
 
-    // Create or get the target room
-    let to_room = room_repo.get_or_create(
-        to_room_id.clone(),
-        target_channel.trim_start_matches('#').to_string(),
-    ).await?;
+    // Get or create the target room
+    let to_room = if to_room_id.starts_with("vnum_") {
+        // For virtual rooms, verify they exist (don't create)
+        match room_repo.get_by_channel_id(&to_room_id).await? {
+            Some(room) => room,
+            None => {
+                let vnum_display = to_room_id.strip_prefix("vnum_").unwrap_or(&to_room_id);
+                state.slack_client.send_dm(
+                    &user_id,
+                    &format!("Virtual room `{}` does not exist. Use `vnums` to see available rooms.", vnum_display)
+                ).await?;
+                return Ok(());
+            }
+        }
+    } else {
+        // For regular channels, create if needed
+        room_repo.get_or_create(
+            to_room_id.clone(),
+            target_channel.trim_start_matches('#').to_string(),
+        ).await?
+    };
 
     // Create the exit
     let exit = Exit::new(from_room_id.clone(), direction.clone(), to_room.channel_id.clone(), Some(player.slack_user_id.clone()));
