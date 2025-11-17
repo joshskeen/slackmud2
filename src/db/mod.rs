@@ -3,6 +3,7 @@ pub mod class;
 pub mod race;
 pub mod room;
 pub mod exit;
+pub mod area;
 
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::time::Duration;

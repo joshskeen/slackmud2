@@ -3,8 +3,9 @@ use crate::slack::SlashCommand;
 use crate::db::player::PlayerRepository;
 use crate::db::room::RoomRepository;
 use crate::db::exit::ExitRepository;
+use crate::db::area::AreaRepository;
 use crate::area::parser::parse_area_file;
-use crate::models::{Room, Exit};
+use crate::models::{Room, Exit, Area};
 use std::sync::Arc;
 use anyhow::Result;
 
@@ -12,8 +13,6 @@ const WIZARD_LEVEL: i32 = 50;
 
 pub async fn handle_import_area(state: Arc<AppState>, command: SlashCommand, args: &str) -> Result<()> {
     let player_repo = PlayerRepository::new(state.db_pool.clone());
-    let room_repo = RoomRepository::new(state.db_pool.clone());
-    let exit_repo = ExitRepository::new(state.db_pool.clone());
 
     // Get player
     let real_name = state.slack_client.get_user_real_name(&command.user_id).await?;
@@ -28,12 +27,15 @@ pub async fn handle_import_area(state: Arc<AppState>, command: SlashCommand, arg
         return Ok(());
     }
 
-    // Parse URL from args
-    let url = args.trim();
+    // Parse args for URL and --force flag
+    let args = args.trim();
+    let force = args.contains("--force");
+    let url = args.replace("--force", "").trim().to_string();
+
     if url.is_empty() {
         state.slack_client.send_dm(
             &command.user_id,
-            "Usage: `/mud import-area <url>`\nExample: `/mud import-area https://raw.githubusercontent.com/avinson/rom24-quickmud/main/area/midgaard.are`"
+            "Usage: `/mud import-area <url> [--force]`\nExample: `/mud import-area https://raw.githubusercontent.com/avinson/rom24-quickmud/main/area/midgaard.are`\n\nUse `--force` to re-import an area that was already imported."
         ).await?;
         return Ok(());
     }
@@ -45,7 +47,7 @@ pub async fn handle_import_area(state: Arc<AppState>, command: SlashCommand, arg
     ).await?;
 
     // Fetch the area file
-    let content = match fetch_area_file(url).await {
+    let content = match fetch_area_file(&url).await {
         Ok(c) => c,
         Err(e) => {
             state.slack_client.send_dm(
@@ -56,88 +58,13 @@ pub async fn handle_import_area(state: Arc<AppState>, command: SlashCommand, arg
         }
     };
 
-    // Parse the area file
-    state.slack_client.send_dm(
+    import_area_from_content(
+        state,
         &command.user_id,
-        "🔄 Parsing area file..."
-    ).await?;
-
-    let area_file = match parse_area_file(&content) {
-        Ok(a) => a,
-        Err(e) => {
-            state.slack_client.send_dm(
-                &command.user_id,
-                &format!("❌ Failed to parse area file: {}", e)
-            ).await?;
-            return Ok(());
-        }
-    };
-
-    // Report what was parsed
-    state.slack_client.send_dm(
-        &command.user_id,
-        &format!("✅ Parsed area: *{}*\n📖 Rooms found: {}\n📊 Vnum range: {}-{}",
-            area_file.header.name,
-            area_file.rooms.len(),
-            area_file.header.min_vnum,
-            area_file.header.max_vnum
-        )
-    ).await?;
-
-    // Import rooms
-    state.slack_client.send_dm(
-        &command.user_id,
-        "🔄 Importing rooms to database..."
-    ).await?;
-
-    let mut rooms_created = 0;
-    let mut exits_created = 0;
-
-    for area_room in &area_file.rooms {
-        // Convert AreaRoom to our Room model
-        // Use vnum as room_id (virtual room)
-        let room_id = format!("vnum_{}", area_room.vnum);
-
-        let room = Room {
-            channel_id: room_id.clone(),
-            channel_name: area_room.name.clone(),
-            description: area_room.description.clone(),
-            attached_channel_id: None, // Virtual room (not attached to Slack channel)
-            created_at: chrono::Utc::now().timestamp(),
-            updated_at: chrono::Utc::now().timestamp(),
-        };
-
-        // Create room
-        room_repo.create(&room).await?;
-        rooms_created += 1;
-
-        // Create exits
-        for area_exit in &area_room.exits {
-            let to_room_id = format!("vnum_{}", area_exit.to_room);
-
-            let exit = Exit::new(
-                room_id.clone(),
-                area_exit.direction.as_str().to_string(),
-                to_room_id,
-                player.slack_user_id.clone(),
-            );
-
-            exit_repo.create(&exit).await?;
-            exits_created += 1;
-        }
-    }
-
-    // Report success
-    state.slack_client.send_dm(
-        &command.user_id,
-        &format!("✨ *Import complete!*\n\n📦 Area: *{}*\n🏠 Rooms created: {}\n🚪 Exits created: {}\n\n💡 These are virtual rooms (not attached to Slack channels). Use `/mud attach #channel` to make a room visible in a channel.",
-            area_file.header.name,
-            rooms_created,
-            exits_created
-        )
-    ).await?;
-
-    Ok(())
+        player.slack_user_id.clone(),
+        &content,
+        force,
+    ).await
 }
 
 pub async fn handle_import_area_dm(
@@ -147,8 +74,6 @@ pub async fn handle_import_area_dm(
     args: &str,
 ) -> Result<()> {
     let player_repo = PlayerRepository::new(state.db_pool.clone());
-    let room_repo = RoomRepository::new(state.db_pool.clone());
-    let exit_repo = ExitRepository::new(state.db_pool.clone());
 
     // Get player
     let player = player_repo.get_or_create(user_id.clone(), user_name).await?;
@@ -162,12 +87,15 @@ pub async fn handle_import_area_dm(
         return Ok(());
     }
 
-    // Parse URL from args
-    let url = args.trim();
+    // Parse args for URL and --force flag
+    let args = args.trim();
+    let force = args.contains("--force");
+    let url = args.replace("--force", "").trim().to_string();
+
     if url.is_empty() {
         state.slack_client.send_dm(
             &user_id,
-            "Usage: `import-area <url>`\nExample: `import-area https://raw.githubusercontent.com/avinson/rom24-quickmud/main/area/midgaard.are`"
+            "Usage: `import-area <url> [--force]`\nExample: `import-area https://raw.githubusercontent.com/avinson/rom24-quickmud/main/area/midgaard.are`\n\nUse `--force` to re-import an area that was already imported."
         ).await?;
         return Ok(());
     }
@@ -179,7 +107,7 @@ pub async fn handle_import_area_dm(
     ).await?;
 
     // Fetch the area file
-    let content = match fetch_area_file(url).await {
+    let content = match fetch_area_file(&url).await {
         Ok(c) => c,
         Err(e) => {
             state.slack_client.send_dm(
@@ -190,17 +118,38 @@ pub async fn handle_import_area_dm(
         }
     };
 
+    import_area_from_content(
+        state,
+        &user_id,
+        player.slack_user_id.clone(),
+        &content,
+        force,
+    ).await
+}
+
+/// Shared function to import an area from file content
+async fn import_area_from_content(
+    state: Arc<AppState>,
+    user_id: &str,
+    player_slack_id: String,
+    content: &str,
+    force: bool,
+) -> Result<()> {
+    let area_repo = AreaRepository::new(state.db_pool.clone());
+    let room_repo = RoomRepository::new(state.db_pool.clone());
+    let exit_repo = ExitRepository::new(state.db_pool.clone());
+
     // Parse the area file
     state.slack_client.send_dm(
-        &user_id,
+        user_id,
         "🔄 Parsing area file..."
     ).await?;
 
-    let area_file = match parse_area_file(&content) {
+    let area_file = match parse_area_file(content) {
         Ok(a) => a,
         Err(e) => {
             state.slack_client.send_dm(
-                &user_id,
+                user_id,
                 &format!("❌ Failed to parse area file: {}", e)
             ).await?;
             return Ok(());
@@ -209,7 +158,7 @@ pub async fn handle_import_area_dm(
 
     // Report what was parsed
     state.slack_client.send_dm(
-        &user_id,
+        user_id,
         &format!("✅ Parsed area: *{}*\n📖 Rooms found: {}\n📊 Vnum range: {}-{}",
             area_file.header.name,
             area_file.rooms.len(),
@@ -218,9 +167,29 @@ pub async fn handle_import_area_dm(
         )
     ).await?;
 
+    // Check if area already exists
+    if area_repo.exists(&area_file.header.name).await? {
+        if !force {
+            state.slack_client.send_dm(
+                user_id,
+                &format!("⚠️  Area *{}* has already been imported.\n\nUse `--force` flag to re-import:\n`import-area <url> --force`",
+                    area_file.header.name
+                )
+            ).await?;
+            return Ok(());
+        } else {
+            // Delete existing area
+            state.slack_client.send_dm(
+                user_id,
+                &format!("🗑️  Deleting existing area *{}*...", area_file.header.name)
+            ).await?;
+            area_repo.delete_by_name(&area_file.header.name).await?;
+        }
+    }
+
     // Import rooms
     state.slack_client.send_dm(
-        &user_id,
+        user_id,
         "🔄 Importing rooms to database..."
     ).await?;
 
@@ -252,7 +221,7 @@ pub async fn handle_import_area_dm(
                 room_id.clone(),
                 area_exit.direction.as_str().to_string(),
                 to_room_id,
-                player.slack_user_id.clone(),
+                player_slack_id.clone(),
             );
 
             exit_repo.create(&exit).await?;
@@ -260,9 +229,20 @@ pub async fn handle_import_area_dm(
         }
     }
 
+    // Record the area in the database
+    let area = Area::new(
+        area_file.header.name.clone(),
+        area_file.header.filename.clone(),
+        area_file.header.min_vnum,
+        area_file.header.max_vnum,
+        rooms_created,
+        exits_created,
+    );
+    area_repo.create(&area).await?;
+
     // Report success
     state.slack_client.send_dm(
-        &user_id,
+        user_id,
         &format!("✨ *Import complete!*\n\n📦 Area: *{}*\n🏠 Rooms created: {}\n🚪 Exits created: {}\n\n💡 These are virtual rooms (not attached to Slack channels). Use `attach #channel` to make a room visible in a channel.",
             area_file.header.name,
             rooms_created,

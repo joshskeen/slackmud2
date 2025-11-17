@@ -61,6 +61,10 @@ async fn main() -> Result<()> {
     tracing::info!("Loading wizards");
     load_wizards(&db_pool).await?;
 
+    // Load default areas (like Midgaard)
+    tracing::info!("Loading default areas");
+    load_default_areas(&db_pool).await?;
+
     // Create Slack client
     let slack_client = slack::SlackClient::new(slack_bot_token);
 
@@ -156,5 +160,98 @@ async fn promote_to_wizard(player_repo: &db::player::PlayerRepository, slack_use
         // Player doesn't exist yet - they'll be promoted when they first join
         tracing::info!("Wizard {} not in database yet (will be promoted on first login)", slack_user_id);
     }
+    Ok(())
+}
+
+/// Load default area files (like Midgaard) on startup
+async fn load_default_areas(pool: &sqlx::PgPool) -> Result<()> {
+    use db::area::AreaRepository;
+    use db::room::RoomRepository;
+    use db::exit::ExitRepository;
+    use area::parser::parse_area_file;
+    use models::{Room, Exit, Area};
+
+    let area_repo = AreaRepository::new(pool.clone());
+    let room_repo = RoomRepository::new(pool.clone());
+    let exit_repo = ExitRepository::new(pool.clone());
+
+    // Check if midgaard.are exists
+    let midgaard_path = "data/areas/midgaard.are";
+    if !tokio::fs::try_exists(midgaard_path).await.unwrap_or(false) {
+        tracing::info!("Midgaard area file not found at {}, skipping auto-import", midgaard_path);
+        return Ok(());
+    }
+
+    // Read the area file
+    let content = tokio::fs::read_to_string(midgaard_path).await
+        .context("Failed to read midgaard.are")?;
+
+    // Parse the area file
+    let area_file = parse_area_file(&content)
+        .context("Failed to parse midgaard.are")?;
+
+    let area_name = &area_file.header.name;
+
+    // Check if already imported
+    if area_repo.exists(area_name).await? {
+        tracing::info!("Area '{}' already imported, skipping", area_name);
+        return Ok(());
+    }
+
+    tracing::info!("Importing area '{}' ({} rooms)...", area_name, area_file.rooms.len());
+
+    let mut rooms_created = 0;
+    let mut exits_created = 0;
+
+    // Import rooms and exits
+    for area_room in &area_file.rooms {
+        let room_id = format!("vnum_{}", area_room.vnum);
+
+        let room = Room {
+            channel_id: room_id.clone(),
+            channel_name: area_room.name.clone(),
+            description: area_room.description.clone(),
+            attached_channel_id: None, // Virtual room
+            created_at: chrono::Utc::now().timestamp(),
+            updated_at: chrono::Utc::now().timestamp(),
+        };
+
+        room_repo.create(&room).await?;
+        rooms_created += 1;
+
+        // Create exits
+        for area_exit in &area_room.exits {
+            let to_room_id = format!("vnum_{}", area_exit.to_room);
+
+            let exit = Exit::new(
+                room_id.clone(),
+                area_exit.direction.as_str().to_string(),
+                to_room_id,
+                "system".to_string(), // System-created exit
+            );
+
+            exit_repo.create(&exit).await?;
+            exits_created += 1;
+        }
+    }
+
+    // Record the area in the database
+    let area = Area::new(
+        area_file.header.name.clone(),
+        area_file.header.filename.clone(),
+        area_file.header.min_vnum,
+        area_file.header.max_vnum,
+        rooms_created,
+        exits_created,
+    );
+    area_repo.create(&area).await?;
+
+    tracing::info!(
+        "Successfully imported area '{}': {} rooms, {} exits",
+        area_name,
+        rooms_created,
+        exits_created
+    );
+
     Ok(())
 }
