@@ -364,8 +364,29 @@ async fn send_object_description(
     description.push_str(&format!("*Material:* {}\n", object.material));
     description.push_str(&format!("*Weight:* {} lbs\n", object.weight));
 
+    // Show equipment stats
+    match object.item_type.to_lowercase().as_str() {
+        "armor" => {
+            let ac = object.get_armor_class();
+            if ac > 0 {
+                description.push_str(&format!("*Armor Class:* {}\n", ac));
+            }
+        }
+        "weapon" => {
+            if let Some(damage) = object.get_weapon_damage() {
+                description.push_str(&format!("*Damage:* {}\n", damage));
+                let avg = object.get_avg_weapon_damage();
+                description.push_str(&format!("*Average Damage:* {:.1}\n", avg));
+            }
+            if let Some(dmg_type) = object.get_damage_type() {
+                description.push_str(&format!("*Damage Type:* {}\n", dmg_type));
+            }
+        }
+        _ => {}
+    }
+
     if object.level > 0 {
-        description.push_str(&format!("*Level:* {}\n", object.level));
+        description.push_str(&format!("*Level Requirement:* {}\n", object.level));
     }
 
     if object.cost > 0 {

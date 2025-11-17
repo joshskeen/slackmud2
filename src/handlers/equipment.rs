@@ -52,6 +52,15 @@ pub async fn handle_wear(state: Arc<AppState>, command: SlashCommand, args: &str
         }
     };
 
+    // Check level requirement
+    if !object.can_use(player.level) {
+        state.slack_client.send_dm(
+            &command.user_id,
+            &format!("You must be level {} to use {}.", object.level, object.short_description)
+        ).await?;
+        return Ok(());
+    }
+
     // Get valid slots for this item
     let valid_slots = EquipmentSlot::from_wear_flags(&object.wear_flags);
 
@@ -156,6 +165,15 @@ pub async fn handle_wield(state: Arc<AppState>, command: SlashCommand, args: &st
             return Ok(());
         }
     };
+
+    // Check level requirement
+    if !object.can_use(player.level) {
+        state.slack_client.send_dm(
+            &command.user_id,
+            &format!("You must be level {} to use {}.", object.level, object.short_description)
+        ).await?;
+        return Ok(());
+    }
 
     // Check if item can be wielded
     if !object.wear_flags.to_lowercase().contains("wield") {
@@ -297,6 +315,9 @@ pub async fn handle_equipment(state: Arc<AppState>, command: SlashCommand) -> Re
     }
 
     let mut equipment_text = String::from("*You are using:*\\n");
+    let mut total_ac = 0;
+    let mut weapon_damage: Option<String> = None;
+    let mut weapon_avg_damage = 0.0;
 
     // Display in slot order
     for slot in EquipmentSlot::all_slots_in_order() {
@@ -312,8 +333,29 @@ pub async fn handle_equipment(state: Arc<AppState>, command: SlashCommand) -> Re
                     slot.display_label(),
                     object.short_description
                 ));
+
+                // Calculate totals
+                total_ac += object.get_armor_class();
+
+                // Track wielded weapon damage
+                if slot_str == "wield" {
+                    weapon_damage = object.get_weapon_damage();
+                    weapon_avg_damage = object.get_avg_weapon_damage();
+                }
             }
         }
+    }
+
+    // Show equipment totals
+    equipment_text.push_str("\\n*Equipment Totals:*\\n");
+    if total_ac > 0 {
+        equipment_text.push_str(&format!("Armor Class: {}\\n", total_ac));
+    }
+    if let Some(ref damage) = weapon_damage {
+        equipment_text.push_str(&format!("Weapon Damage: {} (avg: {:.1})\\n", damage, weapon_avg_damage));
+    }
+    if total_ac == 0 && weapon_damage.is_none() {
+        equipment_text.push_str("No stat bonuses from equipment\\n");
     }
 
     state.slack_client.send_dm(&command.user_id, &equipment_text).await?;
