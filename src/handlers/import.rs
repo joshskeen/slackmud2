@@ -273,6 +273,156 @@ pub async fn handle_import_area_dm(
     Ok(())
 }
 
+pub async fn handle_vnums(state: Arc<AppState>, command: SlashCommand, args: &str) -> Result<()> {
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+
+    // Get player
+    let real_name = state.slack_client.get_user_real_name(&command.user_id).await?;
+    let player = player_repo.get_or_create(command.user_id.clone(), real_name).await?;
+
+    // Check if player is a wizard
+    if player.level < WIZARD_LEVEL {
+        state.slack_client.send_dm(
+            &command.user_id,
+            &format!("You must be a wizard (level {}) to list vnums.", WIZARD_LEVEL)
+        ).await?;
+        return Ok(());
+    }
+
+    // Parse page number from args (default to 1)
+    let page: usize = args.trim().parse().unwrap_or(1).max(1);
+    const PAGE_SIZE: usize = 20;
+
+    // Fetch all virtual rooms (those starting with vnum_)
+    let rooms = list_virtual_rooms(state.clone()).await?;
+
+    if rooms.is_empty() {
+        state.slack_client.send_dm(
+            &command.user_id,
+            "No virtual rooms found. Use `/mud import-area <url>` to import an area file."
+        ).await?;
+        return Ok(());
+    }
+
+    // Calculate pagination
+    let total_rooms = rooms.len();
+    let total_pages = (total_rooms + PAGE_SIZE - 1) / PAGE_SIZE;
+    let start_idx = (page - 1) * PAGE_SIZE;
+    let end_idx = (start_idx + PAGE_SIZE).min(total_rooms);
+
+    if start_idx >= total_rooms {
+        state.slack_client.send_dm(
+            &command.user_id,
+            &format!("Page {} not found. Total pages: {}", page, total_pages)
+        ).await?;
+        return Ok(());
+    }
+
+    // Build the list message
+    let mut message = format!("*Virtual Rooms (Page {} of {})*\n", page, total_pages);
+    message.push_str(&format!("_Total rooms: {}_\n\n", total_rooms));
+
+    for (idx, room) in rooms.iter().enumerate().skip(start_idx).take(PAGE_SIZE) {
+        if idx >= end_idx {
+            break;
+        }
+
+        // Extract vnum from channel_id (format: vnum_3001)
+        let vnum_display = room.channel_id.strip_prefix("vnum_").unwrap_or(&room.channel_id);
+        message.push_str(&format!("• `{}` - {}\n", vnum_display, room.channel_name));
+    }
+
+    if total_pages > 1 {
+        message.push_str(&format!("\n_Use `/mud vnums {}` for next page_", page + 1));
+    }
+
+    state.slack_client.send_dm(&command.user_id, &message).await?;
+    Ok(())
+}
+
+pub async fn handle_vnums_dm(
+    state: Arc<AppState>,
+    user_id: String,
+    user_name: String,
+    args: &str,
+) -> Result<()> {
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+
+    // Get player
+    let player = player_repo.get_or_create(user_id.clone(), user_name).await?;
+
+    // Check if player is a wizard
+    if player.level < WIZARD_LEVEL {
+        state.slack_client.send_dm(
+            &user_id,
+            &format!("You must be a wizard (level {}) to list vnums.", WIZARD_LEVEL)
+        ).await?;
+        return Ok(());
+    }
+
+    // Parse page number from args
+    let page: usize = args.trim().parse().unwrap_or(1).max(1);
+    const PAGE_SIZE: usize = 20;
+
+    // Fetch all virtual rooms
+    let rooms = list_virtual_rooms(state.clone()).await?;
+
+    if rooms.is_empty() {
+        state.slack_client.send_dm(
+            &user_id,
+            "No virtual rooms found. Use `import-area <url>` to import an area file."
+        ).await?;
+        return Ok(());
+    }
+
+    // Calculate pagination
+    let total_rooms = rooms.len();
+    let total_pages = (total_rooms + PAGE_SIZE - 1) / PAGE_SIZE;
+    let start_idx = (page - 1) * PAGE_SIZE;
+    let end_idx = (start_idx + PAGE_SIZE).min(total_rooms);
+
+    if start_idx >= total_rooms {
+        state.slack_client.send_dm(
+            &user_id,
+            &format!("Page {} not found. Total pages: {}", page, total_pages)
+        ).await?;
+        return Ok(());
+    }
+
+    // Build the list message
+    let mut message = format!("*Virtual Rooms (Page {} of {})*\n", page, total_pages);
+    message.push_str(&format!("_Total rooms: {}_\n\n", total_rooms));
+
+    for (idx, room) in rooms.iter().enumerate().skip(start_idx).take(PAGE_SIZE) {
+        if idx >= end_idx {
+            break;
+        }
+
+        let vnum_display = room.channel_id.strip_prefix("vnum_").unwrap_or(&room.channel_id);
+        message.push_str(&format!("• `{}` - {}\n", vnum_display, room.channel_name));
+    }
+
+    if total_pages > 1 {
+        message.push_str(&format!("\n_Use `vnums {}` for next page_", page + 1));
+    }
+
+    state.slack_client.send_dm(&user_id, &message).await?;
+    Ok(())
+}
+
+async fn list_virtual_rooms(state: Arc<AppState>) -> Result<Vec<crate::models::Room>> {
+    use sqlx::Row;
+
+    // Query all rooms where channel_id starts with "vnum_"
+    let rooms = sqlx::query_as::<_, crate::models::Room>(
+        "SELECT * FROM rooms WHERE channel_id LIKE 'vnum_%' ORDER BY channel_id"
+    )
+    .fetch_all(&state.db_pool)
+    .await?;
+
+    Ok(rooms)
+}
+
 async fn fetch_area_file(url: &str) -> Result<String> {
     let response = reqwest::get(url).await?;
 

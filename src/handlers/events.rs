@@ -199,6 +199,14 @@ async fn handle_message_event(
                 _args,
             ).await
         }
+        "vnums" => {
+            super::import::handle_vnums_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                _args,
+            ).await
+        }
         "help" | "h" => {
             handle_help_dm(state.clone(), user_id.clone()).await
         }
@@ -295,6 +303,7 @@ async fn handle_help_dm(state: Arc<AppState>, user_id: String) -> anyhow::Result
         help_text.push_str("• `attach #channel` - Attach current room to a Slack channel\n");
         help_text.push_str("• `detach` - Detach current room from its Slack channel\n");
         help_text.push_str("• `import-area <url>` - Import MUD area file (creates virtual rooms)\n");
+        help_text.push_str("• `vnums [page]` - List all imported virtual rooms\n");
     }
 
     help_text.push_str("\n• `help` or `h` - Show this help message\n");
