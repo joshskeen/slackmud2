@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: slackmud
+    env: docker
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: SLACK_BOT_TOKEN
+        sync: false  # Set this manually in Render dashboard
+      - key: SLACK_SIGNING_SECRET
+        sync: false  # Set this manually in Render dashboard
+      - key: DATABASE_URL
+        value: sqlite:///app/data/slackmud.db
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "3000"
