@@ -21,7 +21,24 @@ pub async fn handle_events(
         }
 
         // Event callback (actual events)
-        EventWrapper::EventCallback { event } => {
+        EventWrapper::EventCallback { event, event_id } => {
+            // Check for duplicate events
+            {
+                let mut recent_events = state.recent_event_ids.lock().unwrap();
+
+                // If we've already seen this event, skip it
+                if recent_events.contains(&event_id) {
+                    tracing::debug!("Skipping duplicate event: {}", event_id);
+                    return StatusCode::OK.into_response();
+                }
+
+                // Add to recent events (keep last 1000)
+                recent_events.push_back(event_id.clone());
+                if recent_events.len() > 1000 {
+                    recent_events.pop_front();
+                }
+            }
+
             match event {
                 Event::Message(msg_event) => {
                     handle_message_event(state, msg_event).await.into_response()

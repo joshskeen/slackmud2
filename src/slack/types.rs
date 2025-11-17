@@ -95,7 +95,10 @@ pub enum EventWrapper {
     #[serde(rename = "url_verification")]
     UrlVerification { challenge: String },
     #[serde(rename = "event_callback")]
-    EventCallback { event: Event },
+    EventCallback {
+        event: Event,
+        event_id: String,
+    },
 }
 
 /// Inner event types
