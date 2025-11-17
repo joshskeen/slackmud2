@@ -4,11 +4,14 @@ A Multi-User Dungeon (MUD) game server that integrates with Slack, written in Ru
 
 ## Features
 
-- **Slack Integration**: Play the game directly from Slack using slash commands
-- **Persistent State**: Player data, classes, races, and rooms stored in SQLite database
+- **Slack Integration**: Play the game directly from Slack using slash commands or DMs
+- **Persistent State**: Player data, classes, races, and rooms stored in PostgreSQL database
 - **Public/Private Actions**: Some actions are visible to everyone, others are private
 - **Character Customization**: Choose your class, race, and gender
-- **Room System**: Each Slack channel is a room in the game
+- **Room System**: Each Slack channel is a room in the game with persistent player locations
+- **DM Interface**: Send commands directly to the bot via DMs for a conversational experience
+- **Wizard System**: Level 50+ players can create exits between rooms using the dig command
+- **Connected Rooms**: Wizards can create directional exits (north, south, east, west, up, down) linking rooms together
 
 ## Architecture
 
@@ -49,10 +52,23 @@ A Multi-User Dungeon (MUD) game server that integrates with Slack, written in Ru
    - Command: `/mud`
    - Request URL: `https://your-render-url.onrender.com/slack/commands`
    - Short Description: `Play SlackMUD`
-   - Usage Hint: `look | character | help`
+   - Usage Hint: `look | character | dig | help`
 4. Save
 
-### 3. Local Development
+### 3. Configure Events API (for DM support)
+
+1. In your Slack app settings, go to "Event Subscriptions"
+2. Enable Events
+3. Set Request URL: `https://your-render-url.onrender.com/slack/events`
+   - Slack will verify this URL when you save (it must be publicly accessible)
+4. Under "Subscribe to bot events", add:
+   - `message.im` - Listen for DM messages to the bot
+5. Save Changes
+6. Go to "App Home"
+7. Under "Show Tabs", enable "Messages Tab"
+8. Check "Allow users to send Slash commands and messages from the messages tab"
+
+### 4. Local Development
 
 1. Clone this repository
 
@@ -77,9 +93,17 @@ A Multi-User Dungeon (MUD) game server that integrates with Slack, written in Ru
    DATABASE_URL=postgresql://localhost/slackmud
    HOST=0.0.0.0
    PORT=3000
+   WIZARDS=U01ABC123DE,U02XYZ789FG  # Optional: Comma-separated Slack user IDs
    ```
 
-5. Run the server (migrations will run automatically):
+5. (Optional) Configure wizards for local development:
+   ```bash
+   cp wizards.txt.example wizards.txt
+   ```
+
+   Edit `wizards.txt` and add Slack user IDs (one per line). These users will be promoted to level 50 (wizard status) and can use the `/mud dig` command to create exits between rooms.
+
+6. Run the server (migrations will run automatically):
    ```bash
    cargo run
    ```
@@ -92,9 +116,9 @@ For local testing with Slack, you'll need to expose your local server using a to
 ngrok http 3000
 ```
 
-Then update your Slack app's slash command URL to the ngrok URL.
+Then update your Slack app's slash command URL and Events API URL to the ngrok URLs.
 
-### 4. Deploy to Render
+### 5. Deploy to Render
 
 1. Push this code to a Git repository (GitHub, GitLab, etc.)
 
@@ -115,21 +139,43 @@ Then update your Slack app's slash command URL to the ngrok URL.
    - `SLACK_BOT_TOKEN`: Your bot token from Slack app settings
    - `SLACK_SIGNING_SECRET`: Your signing secret from Slack app settings
    - `DATABASE_URL`: The Internal Database URL from step 2
+   - `WIZARDS` (optional): Comma-separated list of Slack user IDs to promote to wizard (level 50)
+     - Example: `U01ABC123DE,U02XYZ789FG`
+     - Wizards can use the `/mud dig` command to create exits between rooms
 
 5. Deploy! Render will build and deploy your app
 
-6. Update your Slack app's slash command URL to your Render URL:
-   - Format: `https://your-app-name.onrender.com/slack/commands`
+6. Update your Slack app URLs to your Render URL:
+   - Slash command: `https://your-app-name.onrender.com/slack/commands`
+   - Events API: `https://your-app-name.onrender.com/slack/events`
 
 ## Game Commands
 
-- `/mud look` or `/mud l` - Look around the current room (channel)
-  - Sends room description privately to you
+### General Commands
+
+- `/mud look` or `/mud l` - Look around the current room
+  - Sends room description privately to you, including exits and other players
   - Posts public message that you looked around
 - `/mud character` or `/mud char` - View your character info
   - Shows your level, XP, class, race, gender
   - Lists available classes and races
 - `/mud help` - Show help message
+
+### Wizard Commands (Level 50+)
+
+- `/mud dig <direction> #channel` - Create an exit from your current room to another channel
+  - Valid directions: `north`, `south`, `east`, `west`, `up`, `down`
+  - Example: `/mud dig north #tavern`
+  - Creates a one-way exit in the specified direction
+  - Posts atmospheric public message when exit is created
+
+### DM Commands
+
+You can also send commands directly to the bot via DM (without the `/mud` prefix):
+- `look` or `l` - Look around your current room
+- `character` or `c` - View your character
+- `dig <direction> #channel` - (Wizards only) Create an exit
+- `help` or `h` - Show help message
 
 ## How It Works
 
@@ -148,9 +194,22 @@ The game implements two types of messaging:
 ### Room System
 
 - Each Slack channel is a "room" in the game
-- When you use `/mud look` in a channel, you see that room's description
-- Room descriptions can be customized (future feature)
-- Moving between channels = moving between rooms
+- Players have a persistent current room location (stored in database)
+- When you first use `/mud look` in a channel, that becomes your starting room
+- Slack channels act as "windows" - you can see public actions in any channel you're in, regardless of your game location
+- Use `/mud look` to see your current room description, other players present, and available exits
+- Wizards (level 50+) can create directional exits between rooms using `/mud dig`
+- Movement between rooms will be implemented with the `/mud go <direction>` command (coming soon)
+
+### DM Interface
+
+SlackMUD supports a conversational DM interface for a more immersive experience:
+
+- Send messages directly to the bot without the `/mud` prefix
+- Type `look`, `character`, `dig north #tavern`, etc.
+- All responses are sent privately to you via DM
+- Public actions (like looking around) still post to the channel where your character is located
+- Enable the "Messages Tab" in your Slack app's App Home settings to use DMs
 
 ### Player Progression
 
