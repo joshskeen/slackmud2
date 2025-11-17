@@ -6,6 +6,9 @@ Cargo.lock
 # Environment
 .env
 
+# Game Configuration (private)
+wizards.txt
+
 # Database
 *.db
 *.db-shm

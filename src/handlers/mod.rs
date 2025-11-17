@@ -1,6 +1,7 @@
 mod look;
 mod character;
 mod events;
+mod dig;
 
 pub use events::handle_events;
 
@@ -26,11 +27,12 @@ pub async fn handle_slash_command(
         command.channel_id
     );
 
-    let (subcommand, _args) = command.parse_subcommand();
+    let (subcommand, args) = command.parse_subcommand();
 
     let result = match subcommand {
         "look" | "l" => look::handle_look(state, command).await,
         "character" | "char" => character::handle_character(state, command).await,
+        "dig" => dig::handle_dig(state, command.clone(), args).await,
         "" | "help" => handle_help(state, command).await,
         _ => {
             Err(anyhow::anyhow!("Unknown command: `{}`. Type `/mud help` for available commands.", subcommand))

@@ -91,13 +91,21 @@ async fn handle_message_event(
                 user_id.clone(),
             ).await
         }
+        "dig" => {
+            super::dig::handle_dig_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                _args,
+            ).await
+        }
         "help" | "h" => {
             handle_help_dm(state.clone(), user_id.clone()).await
         }
         _ => {
             // Unknown command
             let help_text = format!(
-                "Unknown command: `{}`. Try:\n• `look` - Look around\n• `character` - View character\n• `help` - Show help",
+                "Unknown command: `{}`. Try:\n• `look` - Look around\n• `character` - View character\n• `dig` - (Wizards) Create exit\n• `help` - Show help",
                 command
             );
             state.slack_client.send_dm(&user_id, &help_text).await

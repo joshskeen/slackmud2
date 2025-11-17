@@ -2,6 +2,7 @@ use crate::AppState;
 use crate::slack::{SlashCommand, Block};
 use crate::db::player::PlayerRepository;
 use crate::db::room::RoomRepository;
+use crate::db::exit::ExitRepository;
 use crate::models::Player;
 use std::sync::Arc;
 use anyhow::Result;
@@ -128,7 +129,7 @@ pub async fn handle_look_dm(
     Ok(())
 }
 
-/// Helper function to send room description with player list
+/// Helper function to send room description with player list and exits
 async fn send_room_description(
     state: Arc<AppState>,
     user_id: &str,
@@ -138,10 +139,29 @@ async fn send_room_description(
     players_in_room: &[Player],
     current_player_id: &str,
 ) -> Result<()> {
+    let exit_repo = ExitRepository::new(state.db_pool.clone());
+    let room_repo = RoomRepository::new(state.db_pool.clone());
+
     let mut blocks = vec![
         Block::section(&format!("*You look around #{}*", room_name)),
         Block::section(room_description),
     ];
+
+    // Add exits section
+    let exits = exit_repo.get_exits_from_room(room_channel_id).await?;
+    if !exits.is_empty() {
+        let mut exits_text = String::from("*Exits:*\n");
+        for exit in &exits {
+            // Get target room name
+            let target_room_name = if let Some(room) = room_repo.get_by_channel_id(&exit.to_room_id).await? {
+                room.channel_name
+            } else {
+                exit.to_room_id.clone()
+            };
+            exits_text.push_str(&format!("• *{}* → #{}\n", exit.direction, target_room_name));
+        }
+        blocks.push(Block::section(&exits_text));
+    }
 
     // Add players in room section
     if !players_in_room.is_empty() {

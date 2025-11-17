@@ -1,0 +1,19 @@
+# SlackMUD Wizards Configuration
+#
+# Add Slack user IDs (one per line) of users who should be wizards
+# Wizards are level 50 and can use the 'dig' command to create exits
+#
+# To get a user's Slack ID:
+# 1. In Slack, click on their profile
+# 2. Click "More" → "Copy member ID"
+# 3. Paste it here (format: U############)
+#
+# Example:
+# U01ABC123DE
+# U02XYZ456GH
+#
+# For production deployment on Render:
+# Set environment variable: WIZARDS=U01ABC123DE,U02XYZ456GH
+#
+# Lines starting with # are comments and will be ignored
+# Blank lines are ignored
