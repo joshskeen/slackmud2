@@ -172,8 +172,23 @@ async fn handle_message_event(
             super::dig::handle_dig_dm(
                 state.clone(),
                 user_id.clone(),
-                user_name,
+                user_name.clone(),
                 _args,
+            ).await
+        }
+        "attach" => {
+            super::attach::handle_attach_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name.clone(),
+                _args,
+            ).await
+        }
+        "detach" => {
+            super::attach::handle_detach_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
             ).await
         }
         "help" | "h" => {
@@ -249,17 +264,33 @@ async fn handle_exits_dm(state: Arc<AppState>, user_id: String, user_name: Strin
 }
 
 async fn handle_help_dm(state: Arc<AppState>, user_id: String) -> anyhow::Result<()> {
-    let help_text = r#"*SlackMUD Commands*
+    use crate::db::player::PlayerRepository;
 
-• `look` or `l` - Look around the current room
-• `exits` - Show available exits
-• `n/s/e/w/u/d` or `north/south/east/west/up/down` - Move in a direction
-• `character` or `c` - View your character info
-• `dig <direction> #channel` - (Wizards only) Create an exit
-• `help` or `h` - Show this help message
+    // Check if user is a wizard
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+    let user_name = match state.slack_client.get_user_real_name(&user_id).await {
+        Ok(name) => name,
+        Err(_) => user_id.clone(),
+    };
+    let player = player_repo.get_or_create(user_id.clone(), user_name).await?;
+    let is_wizard = player.level >= 50;
 
-You can also use `/mud` slash commands in any channel!"#;
+    let mut help_text = String::from("*SlackMUD Commands*\n\n");
+    help_text.push_str("• `look` or `l` - Look around the current room\n");
+    help_text.push_str("• `exits` - Show available exits\n");
+    help_text.push_str("• `n/s/e/w/u/d` or `north/south/east/west/up/down` - Move in a direction\n");
+    help_text.push_str("• `character` or `c` - View your character info\n");
 
-    state.slack_client.send_dm(&user_id, help_text).await?;
+    if is_wizard {
+        help_text.push_str("\n*Wizard Commands:*\n");
+        help_text.push_str("• `dig <direction> #channel` - Create an exit\n");
+        help_text.push_str("• `attach #channel` - Attach current room to a Slack channel\n");
+        help_text.push_str("• `detach` - Detach current room from its Slack channel\n");
+    }
+
+    help_text.push_str("\n• `help` or `h` - Show this help message\n");
+    help_text.push_str("\nYou can also use `/mud` slash commands in any channel!");
+
+    state.slack_client.send_dm(&user_id, &help_text).await?;
     Ok(())
 }

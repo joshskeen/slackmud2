@@ -3,6 +3,7 @@ mod character;
 mod events;
 mod dig;
 mod r#move;
+mod attach;
 
 pub use events::handle_events;
 
@@ -24,8 +25,17 @@ pub async fn broadcast_room_action(
     room_channel_id: &str,
     message: &str,
 ) -> Result<()> {
-    // 1. Post to the Slack channel (visible to anyone in that channel)
-    state.slack_client.post_message(room_channel_id, message, None).await?;
+    use crate::db::room::RoomRepository;
+
+    // 1. Check if room is attached to a Slack channel
+    let room_repo = RoomRepository::new(state.db_pool.clone());
+    if let Some(room) = room_repo.get_by_channel_id(room_channel_id).await? {
+        if let Some(attached_channel) = room.attached_channel_id {
+            // Post to the attached Slack channel (visible to anyone in that channel)
+            let _ = state.slack_client.post_message(&attached_channel, message, None).await;
+            // Ignore post errors to avoid failing the whole broadcast
+        }
+    }
 
     // 2. Send DM to all players whose current room is this room
     let player_repo = PlayerRepository::new(state.db_pool.clone());
@@ -59,6 +69,8 @@ pub async fn handle_slash_command(
         "exits" => handle_exits(state, command).await,
         "character" | "char" => character::handle_character(state, command).await,
         "dig" => dig::handle_dig(state, command.clone(), args).await,
+        "attach" => attach::handle_attach(state, command.clone(), args).await,
+        "detach" => attach::handle_detach(state, command.clone()).await,
         "move" | "go" | "m" => r#move::handle_move(state, command.clone(), args).await,
         // Directional shortcuts
         "north" | "n" => r#move::handle_move(state, command.clone(), "north").await,
@@ -133,17 +145,28 @@ async fn handle_exits(state: Arc<AppState>, command: SlashCommand) -> anyhow::Re
 }
 
 async fn handle_help(state: Arc<AppState>, command: SlashCommand) -> anyhow::Result<()> {
-    let help_text = r#"*SlackMUD Commands*
+    // Check if user is a wizard
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+    let real_name = state.slack_client.get_user_real_name(&command.user_id).await?;
+    let player = player_repo.get_or_create(command.user_id.clone(), real_name).await?;
+    let is_wizard = player.level >= 50;
 
-• `/mud look` or `/mud l` - Look around the current room
-• `/mud exits` - Show available exits
-• `/mud n/s/e/w/u/d` or `/mud north/south/east/west/up/down` - Move in a direction
-• `/mud character` or `/mud char` - Customize your character (class, race, gender)
-• `/mud dig <direction> #channel` - (Wizards only) Create an exit to another room
-• `/mud help` - Show this help message
+    let mut help_text = String::from("*SlackMUD Commands*\n\n");
+    help_text.push_str("• `/mud look` or `/mud l` - Look around the current room\n");
+    help_text.push_str("• `/mud exits` - Show available exits\n");
+    help_text.push_str("• `/mud n/s/e/w/u/d` or `/mud north/south/east/west/up/down` - Move in a direction\n");
+    help_text.push_str("• `/mud character` or `/mud char` - Customize your character (class, race, gender)\n");
 
-You can also DM me directly with commands (without `/mud`)!"#;
+    if is_wizard {
+        help_text.push_str("\n*Wizard Commands:*\n");
+        help_text.push_str("• `/mud dig <direction> #channel` - Create an exit to another room\n");
+        help_text.push_str("• `/mud attach #channel` - Attach current room to a Slack channel\n");
+        help_text.push_str("• `/mud detach` - Detach current room from its Slack channel\n");
+    }
 
-    state.slack_client.send_dm(&command.user_id, help_text).await?;
+    help_text.push_str("\n• `/mud help` - Show this help message\n");
+    help_text.push_str("\nYou can also DM me directly with commands (without `/mud`)!");
+
+    state.slack_client.send_dm(&command.user_id, &help_text).await?;
     Ok(())
 }
