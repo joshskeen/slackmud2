@@ -6,6 +6,7 @@ mod r#move;
 mod attach;
 mod import;
 mod teleport;
+mod item;
 
 pub use events::handle_events;
 
@@ -110,6 +111,10 @@ pub async fn handle_slash_command(
         "west" | "w" => r#move::handle_move(state, command.clone(), "west").await,
         "up" | "u" => r#move::handle_move(state, command.clone(), "up").await,
         "down" | "d" => r#move::handle_move(state, command.clone(), "down").await,
+        // Item commands
+        "get" | "take" => item::handle_get(state, command.clone(), args).await,
+        "drop" => item::handle_drop(state, command.clone(), args).await,
+        "inventory" | "inv" | "i" => item::handle_inventory(state, command).await,
         "" | "help" => handle_help(state, command).await,
         _ => {
             Err(anyhow::anyhow!("Unknown command: `{}`. Type `/mud help` for available commands.", subcommand))
@@ -186,6 +191,9 @@ async fn handle_help(state: Arc<AppState>, command: SlashCommand) -> anyhow::Res
     help_text.push_str("• `/mud look` or `/mud l` - Look around the current room\n");
     help_text.push_str("• `/mud exits` - Show available exits\n");
     help_text.push_str("• `/mud n/s/e/w/u/d` or `/mud north/south/east/west/up/down` - Move in a direction\n");
+    help_text.push_str("• `/mud get <item>` or `/mud take <item>` - Pick up an item\n");
+    help_text.push_str("• `/mud drop <item>` - Drop an item\n");
+    help_text.push_str("• `/mud inventory` or `/mud i` - Show what you're carrying\n");
     help_text.push_str("• `/mud character` or `/mud char` - Customize your character (class, race, gender)\n");
 
     if is_wizard {

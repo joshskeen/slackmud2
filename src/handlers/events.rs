@@ -215,13 +215,37 @@ async fn handle_message_event(
                 _args,
             ).await
         }
+        // Item commands
+        "get" | "take" => {
+            super::item::handle_get_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                _args,
+            ).await
+        }
+        "drop" => {
+            super::item::handle_drop_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                _args,
+            ).await
+        }
+        "inventory" | "inv" | "i" => {
+            super::item::handle_inventory_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+            ).await
+        }
         "help" | "h" => {
             handle_help_dm(state.clone(), user_id.clone()).await
         }
         _ => {
             // Unknown command
             let help_text = format!(
-                "Unknown command: `{}`. Try:\n• `look` - Look around\n• `n/s/e/w/u/d` - Move in a direction\n• `exits` - Show available exits\n• `character` - View character\n• `help` - Show help",
+                "Unknown command: `{}`. Try:\n• `look` - Look around\n• `n/s/e/w/u/d` - Move in a direction\n• `get <item>` - Pick up an item\n• `drop <item>` - Drop an item\n• `inventory` - Show what you're carrying\n• `exits` - Show available exits\n• `character` - View character\n• `help` - Show help",
                 command
             );
             state.slack_client.send_dm(&user_id, &help_text).await
@@ -303,6 +327,9 @@ async fn handle_help_dm(state: Arc<AppState>, user_id: String) -> anyhow::Result
     help_text.push_str("• `look` or `l` - Look around the current room\n");
     help_text.push_str("• `exits` - Show available exits\n");
     help_text.push_str("• `n/s/e/w/u/d` or `north/south/east/west/up/down` - Move in a direction\n");
+    help_text.push_str("• `get <item>` or `take <item>` - Pick up an item\n");
+    help_text.push_str("• `drop <item>` - Drop an item\n");
+    help_text.push_str("• `inventory` or `i` - Show what you're carrying\n");
     help_text.push_str("• `character` or `c` - View your character info\n");
 
     if is_wizard {
