@@ -67,16 +67,16 @@ pub async fn handle_move(state: Arc<AppState>, command: SlashCommand, args: &str
     let destination_room = room_repo.get_by_channel_id(&exit.to_room_id).await?;
     let destination_room_name = destination_room.as_ref().map(|r| r.channel_name.as_str()).unwrap_or("unknown");
 
-    // Post departure message in current room
+    // Post departure message in current room (broadcasts to channel and players in room via DM)
     let departure_text = format!("_{} heads {}._", player.name, direction);
-    state.slack_client.post_message(&current_room_id, &departure_text, None).await?;
+    super::broadcast_room_action(&state, &current_room_id, &departure_text).await?;
 
     // Update player's current room
     player_repo.update_current_channel(&player.slack_user_id, &exit.to_room_id).await?;
 
-    // Post arrival message in new room
+    // Post arrival message in new room (broadcasts to channel and players in room via DM)
     let arrival_text = format!("_{} arrives._", player.name);
-    state.slack_client.post_message(&exit.to_room_id, &arrival_text, None).await?;
+    super::broadcast_room_action(&state, &exit.to_room_id, &arrival_text).await?;
 
     // Send DM confirmation
     state.slack_client.send_dm(
@@ -154,16 +154,16 @@ pub async fn handle_move_dm(
     let destination_room = room_repo.get_by_channel_id(&exit.to_room_id).await?;
     let destination_room_name = destination_room.as_ref().map(|r| r.channel_name.as_str()).unwrap_or("unknown");
 
-    // Post departure message in current room
+    // Post departure message in current room (broadcasts to channel and players in room via DM)
     let departure_text = format!("_{} heads {}._", player.name, direction);
-    state.slack_client.post_message(&current_room_id, &departure_text, None).await?;
+    super::broadcast_room_action(&state, &current_room_id, &departure_text).await?;
 
     // Update player's current room
     player_repo.update_current_channel(&player.slack_user_id, &exit.to_room_id).await?;
 
-    // Post arrival message in new room
+    // Post arrival message in new room (broadcasts to channel and players in room via DM)
     let arrival_text = format!("_{} arrives._", player.name);
-    state.slack_client.post_message(&exit.to_room_id, &arrival_text, None).await?;
+    super::broadcast_room_action(&state, &exit.to_room_id, &arrival_text).await?;
 
     // Send DM confirmation
     state.slack_client.send_dm(

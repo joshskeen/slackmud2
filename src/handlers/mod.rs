@@ -8,6 +8,7 @@ pub use events::handle_events;
 
 use crate::AppState;
 use crate::slack::SlashCommand;
+use crate::db::player::PlayerRepository;
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
@@ -15,6 +16,29 @@ use axum::{
     http::StatusCode,
 };
 use std::sync::Arc;
+use anyhow::Result;
+
+/// Broadcast a public action to a room's channel AND to all players in that room via DM
+pub async fn broadcast_room_action(
+    state: &Arc<AppState>,
+    room_channel_id: &str,
+    message: &str,
+) -> Result<()> {
+    // 1. Post to the Slack channel (visible to anyone in that channel)
+    state.slack_client.post_message(room_channel_id, message, None).await?;
+
+    // 2. Send DM to all players whose current room is this room
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+    let players_in_room = player_repo.get_players_in_room(room_channel_id).await?;
+
+    for player in players_in_room {
+        // Send the action as a DM so it appears in their SlackMUD conversation
+        let _ = state.slack_client.send_dm(&player.slack_user_id, message).await;
+        // Ignore individual DM errors to avoid failing the whole broadcast
+    }
+
+    Ok(())
+}
 
 /// Main handler for all /mud slash commands
 pub async fn handle_slash_command(

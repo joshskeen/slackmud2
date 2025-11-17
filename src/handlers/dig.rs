@@ -110,9 +110,9 @@ pub async fn handle_dig(state: Arc<AppState>, command: SlashCommand, args: &str)
         &format!("✨ You dig an exit to the *{}* from #{}, leading to #{}!", direction, from_room_name, to_room.channel_name)
     ).await?;
 
-    // Post public action
+    // Post public action (broadcasts to channel and players in room via DM)
     let public_text = format!("_{} utters some strange words. An exit to the {} flashes into existence!_", player.name, direction);
-    state.slack_client.post_message(&from_room_id, &public_text, None).await?;
+    super::broadcast_room_action(&state, &from_room_id, &public_text).await?;
 
     Ok(())
 }
@@ -218,9 +218,9 @@ pub async fn handle_dig_dm(
         &format!("✨ You dig an exit to the *{}* from #{}, leading to #{}!", direction, from_room_name, to_room.channel_name)
     ).await?;
 
-    // Post public action
+    // Post public action (broadcasts to channel and players in room via DM)
     let public_text = format!("_{} utters some strange words. An exit to the {} flashes into existence!_", player.name, direction);
-    state.slack_client.post_message(&from_room_id, &public_text, None).await?;
+    super::broadcast_room_action(&state, &from_room_id, &public_text).await?;
 
     Ok(())
 }

@@ -64,9 +64,9 @@ pub async fn handle_look(state: Arc<AppState>, command: SlashCommand) -> Result<
         &player.slack_user_id,
     ).await?;
 
-    // Post public action to the player's current room
+    // Post public action to the player's current room (broadcasts to channel and players in room via DM)
     let public_text = format!("_{} looks around the room carefully._", player.name);
-    state.slack_client.post_message(&room.channel_id, &public_text, None).await?;
+    super::broadcast_room_action(&state, &room.channel_id, &public_text).await?;
 
     Ok(())
 }
@@ -122,9 +122,9 @@ pub async fn handle_look_dm(
         &player.slack_user_id,
     ).await?;
 
-    // Post public action to the player's current room
+    // Post public action to the player's current room (broadcasts to channel and players in room via DM)
     let public_text = format!("_{} looks around the room carefully._", player.name);
-    state.slack_client.post_message(&channel_id, &public_text, None).await?;
+    super::broadcast_room_action(&state, &channel_id, &public_text).await?;
 
     Ok(())
 }
