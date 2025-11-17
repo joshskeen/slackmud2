@@ -26,7 +26,7 @@ impl Player {
             class_id: None,
             race_id: None,
             gender: None,
-            current_channel_id: None,
+            current_channel_id: Some("vnum_3014".to_string()), // Start in Market Square (Midgaard)
             created_at: now,
             updated_at: now,
         }
