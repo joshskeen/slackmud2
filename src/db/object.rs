@@ -191,4 +191,62 @@ impl ObjectInstanceRepository {
             .await?;
         Ok(())
     }
+
+    /// Equip an item in a specific slot
+    pub async fn equip_item(
+        &self,
+        instance_id: i32,
+        player_slack_id: &str,
+        equipped_slot: &str,
+    ) -> Result<(), sqlx::Error> {
+        let now = chrono::Utc::now().timestamp();
+        sqlx::query(
+            "UPDATE object_instances
+             SET location_type = 'equipped', location_id = $1, equipped_slot = $2, updated_at = $3
+             WHERE id = $4"
+        )
+        .bind(player_slack_id)
+        .bind(equipped_slot)
+        .bind(now)
+        .bind(instance_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Unequip an item (move from equipped to inventory)
+    pub async fn unequip_item(
+        &self,
+        instance_id: i32,
+        player_slack_id: &str,
+    ) -> Result<(), sqlx::Error> {
+        let now = chrono::Utc::now().timestamp();
+        sqlx::query(
+            "UPDATE object_instances
+             SET location_type = 'player', location_id = $1, equipped_slot = NULL, updated_at = $2
+             WHERE id = $3"
+        )
+        .bind(player_slack_id)
+        .bind(now)
+        .bind(instance_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Get item in a specific equipment slot for a player
+    pub async fn get_item_in_slot(
+        &self,
+        player_slack_id: &str,
+        equipped_slot: &str,
+    ) -> Result<Option<ObjectInstance>, sqlx::Error> {
+        sqlx::query_as::<_, ObjectInstance>(
+            "SELECT * FROM object_instances
+             WHERE location_type = 'equipped' AND location_id = $1 AND equipped_slot = $2"
+        )
+        .bind(player_slack_id)
+        .bind(equipped_slot)
+        .fetch_optional(&self.pool)
+        .await
+    }
 }

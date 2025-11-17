@@ -95,6 +95,7 @@ pub struct ObjectInstance {
     pub location_type: String, // 'room', 'player', 'container', 'equipped'
     pub location_id: String,
     pub wear_location: Option<String>,
+    pub equipped_slot: Option<String>, // 'body', 'wield', 'finger_l', etc.
     pub current_condition: i32,
     pub timer: Option<i32>,
     pub created_at: i64,
@@ -110,6 +111,7 @@ impl ObjectInstance {
             location_type: "room".to_string(),
             location_id: room_channel_id,
             wear_location: None,
+            equipped_slot: None,
             current_condition: 100,
             timer: None,
             created_at: now,
@@ -125,6 +127,7 @@ impl ObjectInstance {
             location_type: "player".to_string(),
             location_id: player_slack_id,
             wear_location: None,
+            equipped_slot: None,
             current_condition: 100,
             timer: None,
             created_at: now,

@@ -7,6 +7,7 @@ mod attach;
 mod import;
 mod teleport;
 mod item;
+mod equipment;
 
 pub use events::handle_events;
 
@@ -115,6 +116,11 @@ pub async fn handle_slash_command(
         "get" | "take" => item::handle_get(state, command.clone(), args).await,
         "drop" => item::handle_drop(state, command.clone(), args).await,
         "inventory" | "inv" | "i" => item::handle_inventory(state, command).await,
+        // Equipment commands
+        "wear" => equipment::handle_wear(state, command.clone(), args).await,
+        "wield" => equipment::handle_wield(state, command.clone(), args).await,
+        "remove" | "rem" => equipment::handle_remove(state, command.clone(), args).await,
+        "equipment" | "eq" => equipment::handle_equipment(state, command).await,
         "" | "help" => handle_help(state, command).await,
         _ => {
             Err(anyhow::anyhow!("Unknown command: `{}`. Type `/mud help` for available commands.", subcommand))
@@ -195,6 +201,10 @@ async fn handle_help(state: Arc<AppState>, command: SlashCommand) -> anyhow::Res
     help_text.push_str("• `/mud get <item>` or `/mud take <item>` - Pick up an item\n");
     help_text.push_str("• `/mud drop <item>` - Drop an item\n");
     help_text.push_str("• `/mud inventory` or `/mud i` - Show what you're carrying\n");
+    help_text.push_str("• `/mud wear <item>` - Wear armor or clothing\n");
+    help_text.push_str("• `/mud wield <weapon>` - Wield a weapon\n");
+    help_text.push_str("• `/mud remove <item>` - Remove equipped item\n");
+    help_text.push_str("• `/mud equipment` or `/mud eq` - Show your equipment\n");
     help_text.push_str("• `/mud character` or `/mud char` - Customize your character (class, race, gender)\n");
 
     if is_wizard {

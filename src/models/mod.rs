@@ -5,6 +5,7 @@ pub mod room;
 pub mod exit;
 pub mod area;
 pub mod object;
+pub mod equipment;
 
 pub use player::Player;
 pub use class::Class;
@@ -13,3 +14,4 @@ pub use room::Room;
 pub use exit::Exit;
 pub use area::Area;
 pub use object::{Object, ObjectInstance};
+pub use equipment::EquipmentSlot;
