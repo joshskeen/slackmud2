@@ -218,15 +218,16 @@ async fn teleport_player(
     );
     state.slack_client.send_dm(target_slack_id, &message).await?;
 
-    // Broadcast to the room (if requesting user is teleporting themselves)
-    if requesting_user_id == target_slack_id {
-        let broadcast_msg = format!("✨ *{}* appears in a flash of light!", target_name);
-        crate::handlers::broadcast_room_action(&state, &room_id, &broadcast_msg).await?;
-    } else {
-        // If wizard is teleporting someone else, broadcast to the destination room
-        let broadcast_msg = format!("✨ *{}* appears in a flash of light!", target_name);
-        crate::handlers::broadcast_room_action(&state, &room_id, &broadcast_msg).await?;
-    }
+    // Broadcast to the room
+    let third_person_msg = format!("✨ _{} appears in a flash of light!_", target_name);
+    let first_person_msg = "✨ _You appear in a flash of light!_";
+    crate::handlers::broadcast_room_action(
+        &state,
+        &room_id,
+        &third_person_msg,
+        Some(target_slack_id),
+        Some(first_person_msg),
+    ).await?;
 
     Ok(())
 }

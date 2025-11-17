@@ -111,8 +111,15 @@ pub async fn handle_dig(state: Arc<AppState>, command: SlashCommand, args: &str)
     ).await?;
 
     // Post public action (broadcasts to channel and players in room via DM)
-    let public_text = format!("_{} utters some strange words. An exit to the {} flashes into existence!_", player.name, direction);
-    super::broadcast_room_action(&state, &from_room_id, &public_text).await?;
+    let third_person_text = format!("_{} utters some strange words. An exit to the {} flashes into existence!_", player.name, direction);
+    let first_person_text = format!("_You utter some strange words. An exit to the {} flashes into existence!_", direction);
+    super::broadcast_room_action(
+        &state,
+        &from_room_id,
+        &third_person_text,
+        Some(&command.user_id),
+        Some(&first_person_text),
+    ).await?;
 
     Ok(())
 }
@@ -219,8 +226,15 @@ pub async fn handle_dig_dm(
     ).await?;
 
     // Post public action (broadcasts to channel and players in room via DM)
-    let public_text = format!("_{} utters some strange words. An exit to the {} flashes into existence!_", player.name, direction);
-    super::broadcast_room_action(&state, &from_room_id, &public_text).await?;
+    let third_person_text = format!("_{} utters some strange words. An exit to the {} flashes into existence!_", player.name, direction);
+    let first_person_text = format!("_You utter some strange words. An exit to the {} flashes into existence!_", direction);
+    super::broadcast_room_action(
+        &state,
+        &from_room_id,
+        &third_person_text,
+        Some(&user_id),
+        Some(&first_person_text),
+    ).await?;
 
     Ok(())
 }

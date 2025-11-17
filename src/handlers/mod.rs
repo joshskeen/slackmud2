@@ -22,10 +22,15 @@ use std::sync::Arc;
 use anyhow::Result;
 
 /// Broadcast a public action to a room's channel AND to all players in that room via DM
+///
+/// If actor_user_id is provided, the actor receives actor_message (first-person perspective)
+/// while other players receive message (third-person perspective).
 pub async fn broadcast_room_action(
     state: &Arc<AppState>,
     room_channel_id: &str,
     message: &str,
+    actor_user_id: Option<&str>,
+    actor_message: Option<&str>,
 ) -> Result<()> {
     use crate::db::room::RoomRepository;
 
@@ -34,6 +39,7 @@ pub async fn broadcast_room_action(
     if let Some(room) = room_repo.get_by_channel_id(room_channel_id).await? {
         if let Some(attached_channel) = room.attached_channel_id {
             // Post to the attached Slack channel with a subtle bot appearance
+            // Always use third-person message in the channel
             let _ = state.slack_client.post_message_with_username(
                 &attached_channel,
                 message,
@@ -50,8 +56,22 @@ pub async fn broadcast_room_action(
     let players_in_room = player_repo.get_players_in_room(room_channel_id).await?;
 
     for player in players_in_room {
+        // Determine which message to send to this player
+        let player_message = if let Some(actor_id) = actor_user_id {
+            if player.slack_user_id == actor_id {
+                // This is the actor - send the first-person message
+                actor_message.unwrap_or(message)
+            } else {
+                // This is another player - send the third-person message
+                message
+            }
+        } else {
+            // No actor specified - send the same message to everyone
+            message
+        };
+
         // Send the action as a DM so it appears in their SlackMUD conversation
-        let _ = state.slack_client.send_dm(&player.slack_user_id, message).await;
+        let _ = state.slack_client.send_dm(&player.slack_user_id, player_message).await;
         // Ignore individual DM errors to avoid failing the whole broadcast
     }
 

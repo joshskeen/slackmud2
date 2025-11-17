@@ -65,8 +65,15 @@ pub async fn handle_look(state: Arc<AppState>, command: SlashCommand) -> Result<
     ).await?;
 
     // Post public action to the player's current room (broadcasts to channel and players in room via DM)
-    let public_text = format!("_{} looks around the room carefully._", player.name);
-    super::broadcast_room_action(&state, &room.channel_id, &public_text).await?;
+    let third_person_text = format!("_{} looks around the room carefully._", player.name);
+    let first_person_text = "_You look around the room carefully._";
+    super::broadcast_room_action(
+        &state,
+        &room.channel_id,
+        &third_person_text,
+        Some(&command.user_id),
+        Some(first_person_text),
+    ).await?;
 
     Ok(())
 }
@@ -123,8 +130,15 @@ pub async fn handle_look_dm(
     ).await?;
 
     // Post public action to the player's current room (broadcasts to channel and players in room via DM)
-    let public_text = format!("_{} looks around the room carefully._", player.name);
-    super::broadcast_room_action(&state, &channel_id, &public_text).await?;
+    let third_person_text = format!("_{} looks around the room carefully._", player.name);
+    let first_person_text = "_You look around the room carefully._";
+    super::broadcast_room_action(
+        &state,
+        &channel_id,
+        &third_person_text,
+        Some(&user_id),
+        Some(first_person_text),
+    ).await?;
 
     Ok(())
 }

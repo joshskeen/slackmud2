@@ -68,15 +68,29 @@ pub async fn handle_move(state: Arc<AppState>, command: SlashCommand, args: &str
     let destination_room_name = destination_room.as_ref().map(|r| r.channel_name.as_str()).unwrap_or("unknown");
 
     // Post departure message in current room (broadcasts to channel and players in room via DM)
-    let departure_text = format!("_{} heads {}._", player.name, direction);
-    super::broadcast_room_action(&state, &current_room_id, &departure_text).await?;
+    let departure_third_person = format!("_{} heads {}._", player.name, direction);
+    let departure_first_person = format!("_You head {}._", direction);
+    super::broadcast_room_action(
+        &state,
+        &current_room_id,
+        &departure_third_person,
+        Some(&command.user_id),
+        Some(&departure_first_person),
+    ).await?;
 
     // Update player's current room
     player_repo.update_current_channel(&player.slack_user_id, &exit.to_room_id).await?;
 
     // Post arrival message in new room (broadcasts to channel and players in room via DM)
-    let arrival_text = format!("_{} arrives._", player.name);
-    super::broadcast_room_action(&state, &exit.to_room_id, &arrival_text).await?;
+    let arrival_third_person = format!("_{} arrives._", player.name);
+    let arrival_first_person = "_You arrive._";
+    super::broadcast_room_action(
+        &state,
+        &exit.to_room_id,
+        &arrival_third_person,
+        Some(&command.user_id),
+        Some(arrival_first_person),
+    ).await?;
 
     // Send DM confirmation
     state.slack_client.send_dm(
@@ -155,15 +169,29 @@ pub async fn handle_move_dm(
     let destination_room_name = destination_room.as_ref().map(|r| r.channel_name.as_str()).unwrap_or("unknown");
 
     // Post departure message in current room (broadcasts to channel and players in room via DM)
-    let departure_text = format!("_{} heads {}._", player.name, direction);
-    super::broadcast_room_action(&state, &current_room_id, &departure_text).await?;
+    let departure_third_person = format!("_{} heads {}._", player.name, direction);
+    let departure_first_person = format!("_You head {}._", direction);
+    super::broadcast_room_action(
+        &state,
+        &current_room_id,
+        &departure_third_person,
+        Some(&user_id),
+        Some(&departure_first_person),
+    ).await?;
 
     // Update player's current room
     player_repo.update_current_channel(&player.slack_user_id, &exit.to_room_id).await?;
 
     // Post arrival message in new room (broadcasts to channel and players in room via DM)
-    let arrival_text = format!("_{} arrives._", player.name);
-    super::broadcast_room_action(&state, &exit.to_room_id, &arrival_text).await?;
+    let arrival_third_person = format!("_{} arrives._", player.name);
+    let arrival_first_person = "_You arrive._";
+    super::broadcast_room_action(
+        &state,
+        &exit.to_room_id,
+        &arrival_third_person,
+        Some(&user_id),
+        Some(arrival_first_person),
+    ).await?;
 
     // Send DM confirmation
     state.slack_client.send_dm(
