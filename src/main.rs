@@ -220,6 +220,12 @@ async fn load_default_areas(pool: &sqlx::PgPool) -> Result<()> {
         for area_exit in &area_room.exits {
             let to_room_id = format!("vnum_{}", area_exit.to_room);
 
+            // Skip exits that point to rooms outside this area (exits to other areas)
+            if area_exit.to_room < area_file.header.min_vnum || area_exit.to_room > area_file.header.max_vnum {
+                tracing::debug!("Skipping exit from {} to {} (outside area range)", room_id, to_room_id);
+                continue;
+            }
+
             let exit = Exit::new(
                 room_id.clone(),
                 area_exit.direction.as_str().to_string(),

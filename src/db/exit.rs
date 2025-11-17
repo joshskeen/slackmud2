@@ -13,7 +13,8 @@ impl ExitRepository {
     pub async fn create(&self, exit: &Exit) -> Result<(), sqlx::Error> {
         sqlx::query(
             "INSERT INTO exits (from_room_id, direction, to_room_id, created_at, created_by)
-             VALUES ($1, $2, $3, $4, $5)"
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (from_room_id, direction) DO NOTHING"
         )
         .bind(&exit.from_room_id)
         .bind(&exit.direction)
