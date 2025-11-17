@@ -1,8 +1,9 @@
 -- Add equipment slot tracking to object instances
 -- This allows objects to be equipped in specific body locations
 
+-- Add column if it doesn't exist (idempotent)
 ALTER TABLE object_instances
-ADD COLUMN equipped_slot TEXT;
+ADD COLUMN IF NOT EXISTS equipped_slot TEXT;
 
 -- equipped_slot values:
 -- NULL = not equipped (in inventory or room)
@@ -23,6 +24,6 @@ ADD COLUMN equipped_slot TEXT;
 -- 'hold' = held item (off-hand)
 -- 'float' = floating nearby
 
--- Create index for faster equipment queries
-CREATE INDEX idx_object_instances_equipped ON object_instances(location_id, location_type, equipped_slot)
+-- Create index for faster equipment queries (idempotent)
+CREATE INDEX IF NOT EXISTS idx_object_instances_equipped ON object_instances(location_id, location_type, equipped_slot)
 WHERE location_type = 'equipped';
