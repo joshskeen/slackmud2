@@ -168,12 +168,14 @@ async fn load_default_areas(pool: &sqlx::PgPool) -> Result<()> {
     use db::area::AreaRepository;
     use db::room::RoomRepository;
     use db::exit::ExitRepository;
+    use db::object::ObjectRepository;
     use area::parser::parse_area_file;
-    use models::{Room, Exit, Area};
+    use models::{Room, Exit, Area, Object};
 
     let area_repo = AreaRepository::new(pool.clone());
     let room_repo = RoomRepository::new(pool.clone());
     let exit_repo = ExitRepository::new(pool.clone());
+    let object_repo = ObjectRepository::new(pool.clone());
 
     // Embed the midgaard.are file directly in the binary
     const MIDGAARD_CONTENT: &str = include_str!("../data/areas/midgaard.are");
@@ -191,10 +193,11 @@ async fn load_default_areas(pool: &sqlx::PgPool) -> Result<()> {
         return Ok(());
     }
 
-    tracing::info!("Importing area '{}' ({} rooms)...", area_name, area_file.rooms.len());
+    tracing::info!("Importing area '{}' ({} rooms, {} objects)...", area_name, area_file.rooms.len(), area_file.objects.len());
 
     let mut rooms_created = 0;
     let mut exits_created = 0;
+    let mut objects_created = 0;
 
     // First pass: Create all rooms
     for area_room in &area_file.rooms {
@@ -238,6 +241,33 @@ async fn load_default_areas(pool: &sqlx::PgPool) -> Result<()> {
         }
     }
 
+    // Third pass: Create all objects
+    for area_object in &area_file.objects {
+        let object = Object::new(
+            area_object.vnum,
+            area_name.clone(),
+            area_object.keywords.clone(),
+            area_object.short_description.clone(),
+            area_object.long_description.clone(),
+            area_object.material.clone(),
+            area_object.item_type.clone(),
+            area_object.extra_flags.clone(),
+            area_object.wear_flags.clone(),
+            area_object.value0,
+            area_object.value1,
+            area_object.value2.clone(),
+            area_object.value3,
+            area_object.value4,
+            area_object.weight,
+            area_object.cost,
+            area_object.level,
+            area_object.condition.clone(),
+        );
+
+        object_repo.create(&object).await?;
+        objects_created += 1;
+    }
+
     // Record the area in the database
     let area = Area::new(
         area_file.header.name.clone(),
@@ -250,10 +280,11 @@ async fn load_default_areas(pool: &sqlx::PgPool) -> Result<()> {
     area_repo.create(&area).await?;
 
     tracing::info!(
-        "Successfully imported area '{}': {} rooms, {} exits",
+        "Successfully imported area '{}': {} rooms, {} exits, {} objects",
         area_name,
         rooms_created,
-        exits_created
+        exits_created,
+        objects_created
     );
 
     Ok(())

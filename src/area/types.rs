@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub struct AreaFile {
     pub header: AreaHeader,
     pub rooms: Vec<AreaRoom>,
+    pub objects: Vec<AreaObject>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -41,6 +42,28 @@ pub struct AreaExit {
 pub struct ExtraDescription {
     pub keywords: Vec<String>,
     pub description: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct AreaObject {
+    pub vnum: i32,
+    pub keywords: String,
+    pub short_description: String,
+    pub long_description: String,
+    pub material: String,
+    pub item_type: String,
+    pub extra_flags: String,
+    pub wear_flags: String,
+    pub value0: i32,
+    pub value1: i32,
+    pub value2: String,
+    pub value3: i32,
+    pub value4: i32,
+    pub weight: i32,
+    pub cost: i32,
+    pub level: i32,
+    pub condition: String,
+    pub extra_descriptions: Vec<ExtraDescription>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -197,6 +220,15 @@ pub enum ParseError {
 
     #[error("Invalid exit data")]
     InvalidExitData,
+
+    #[error("Invalid object type line")]
+    InvalidObjectType,
+
+    #[error("Invalid object values line")]
+    InvalidObjectValues,
+
+    #[error("Invalid object weight/cost line")]
+    InvalidObjectWeightCost,
 
     #[error("Parse integer error: {0}")]
     ParseInt(#[from] std::num::ParseIntError),

@@ -18,6 +18,10 @@ pub fn parse_area_file(content: &str) -> Result<AreaFile, ParseError> {
                 lines.next(); // Consume #ROOMS
                 area.rooms = parse_rooms(&mut lines)?;
             }
+            "#OBJECTS" => {
+                lines.next(); // Consume #OBJECTS
+                area.objects = parse_objects(&mut lines)?;
+            }
             "#$" => break, // End of file
             _ => {
                 lines.next(); // Skip unknown sections
@@ -270,6 +274,162 @@ fn parse_vnum(line: &str) -> Result<i32, ParseError> {
     trimmed[1..]
         .parse::<i32>()
         .map_err(|_| ParseError::InvalidVnum)
+}
+
+fn parse_objects<'a, I>(lines: &mut Peekable<I>) -> Result<Vec<AreaObject>, ParseError>
+where
+    I: Iterator<Item = &'a str>,
+{
+    let mut objects = Vec::new();
+
+    while let Some(&line) = lines.peek() {
+        let trimmed = line.trim();
+
+        // Check for section end
+        if trimmed.starts_with("#RESETS")
+            || trimmed.starts_with("#MOBILES")
+            || trimmed.starts_with("#ROOMS")
+            || trimmed.starts_with("#SHOPS")
+            || trimmed.starts_with("#SPECIALS")
+            || trimmed.starts_with("#$")
+            || trimmed == "#0"
+        {
+            break;
+        }
+
+        if trimmed.starts_with('#') && trimmed.len() > 1 {
+            // This is a vnum marker - parse the object
+            objects.push(parse_single_object(lines)?);
+        } else {
+            lines.next(); // Skip non-vnum lines
+        }
+    }
+
+    Ok(objects)
+}
+
+fn parse_single_object<'a, I>(lines: &mut Peekable<I>) -> Result<AreaObject, ParseError>
+where
+    I: Iterator<Item = &'a str>,
+{
+    // Parse #vnum
+    let vnum_line = lines.next().ok_or(ParseError::UnexpectedEof)?;
+    let vnum = parse_vnum(vnum_line)?;
+
+    // Parse keywords (tilde-terminated)
+    let keywords = read_until_tilde(lines)?;
+
+    // Parse short description (tilde-terminated)
+    let short_description = read_until_tilde(lines)?;
+
+    // Parse long description (tilde-terminated)
+    let long_description = read_until_tilde(lines)?;
+
+    // Parse material (tilde-terminated)
+    let material = read_until_tilde(lines)?;
+
+    // Parse item type line: "type extra_flags wear_flags"
+    let type_line = lines.next().ok_or(ParseError::UnexpectedEof)?;
+    let (item_type, extra_flags, wear_flags) = parse_object_type_line(type_line)?;
+
+    // Parse values line (format varies by item type)
+    let values_line = lines.next().ok_or(ParseError::UnexpectedEof)?;
+    let (value0, value1, value2, value3, value4) = parse_object_values_line(values_line)?;
+
+    // Parse weight/cost/level/condition line
+    let weight_line = lines.next().ok_or(ParseError::UnexpectedEof)?;
+    let (weight, cost, level, condition) = parse_object_weight_line(weight_line)?;
+
+    // Parse optional extra descriptions
+    let mut extra_descriptions = Vec::new();
+    while let Some(&line) = lines.peek() {
+        let trimmed = line.trim();
+
+        if trimmed == "E" {
+            extra_descriptions.push(parse_extra_desc(lines)?);
+        } else if trimmed.starts_with('#') {
+            // Next object
+            break;
+        } else {
+            lines.next(); // Skip unknown lines
+        }
+    }
+
+    Ok(AreaObject {
+        vnum,
+        keywords,
+        short_description,
+        long_description,
+        material,
+        item_type,
+        extra_flags,
+        wear_flags,
+        value0,
+        value1,
+        value2,
+        value3,
+        value4,
+        weight,
+        cost,
+        level,
+        condition,
+        extra_descriptions,
+    })
+}
+
+fn parse_object_type_line(line: &str) -> Result<(String, String, String), ParseError> {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+
+    if parts.is_empty() {
+        return Err(ParseError::InvalidObjectType);
+    }
+
+    let item_type = parts[0].to_string();
+    let extra_flags = parts.get(1).unwrap_or(&"0").to_string();
+    let wear_flags = parts.get(2).unwrap_or(&"A").to_string();
+
+    Ok((item_type, extra_flags, wear_flags))
+}
+
+fn parse_object_values_line(line: &str) -> Result<(i32, i32, String, i32, i32), ParseError> {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+
+    // Values vary by item type, but we'll parse them generically
+    // value0 and value1 are usually integers
+    // value2 might be a string (e.g., liquid type) or integer
+    // value3 and value4 are integers
+
+    let value0 = parts.get(0).unwrap_or(&"0").parse::<i32>().unwrap_or(0);
+    let value1 = parts.get(1).unwrap_or(&"0").parse::<i32>().unwrap_or(0);
+
+    // value2 might be a quoted string or a number
+    let value2_raw = parts.get(2).unwrap_or(&"0");
+    let value2 = if value2_raw.starts_with('\'') || value2_raw.starts_with('"') {
+        // It's a string - remove quotes
+        value2_raw.trim_matches(|c| c == '\'' || c == '"').to_string()
+    } else {
+        value2_raw.to_string()
+    };
+
+    let value3 = parts.get(3).unwrap_or(&"0").parse::<i32>().unwrap_or(0);
+    let value4 = parts.get(4).unwrap_or(&"0").parse::<i32>().unwrap_or(0);
+
+    Ok((value0, value1, value2, value3, value4))
+}
+
+fn parse_object_weight_line(line: &str) -> Result<(i32, i32, i32, String), ParseError> {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+
+    if parts.len() < 4 {
+        return Err(ParseError::InvalidObjectWeightCost);
+    }
+
+    let weight = parts[0].parse::<i32>()?;
+    let cost = parts[1].parse::<i32>()?;
+    let level = parts[2].parse::<i32>()?;
+    let condition = parts[3].to_string();
+
+    Ok((weight, cost, level, condition))
 }
 
 #[cfg(test)]
