@@ -5,6 +5,7 @@ pub struct AreaFile {
     pub header: AreaHeader,
     pub rooms: Vec<AreaRoom>,
     pub objects: Vec<AreaObject>,
+    pub resets: Vec<Reset>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -64,6 +65,56 @@ pub struct AreaObject {
     pub level: i32,
     pub condition: String,
     pub extra_descriptions: Vec<ExtraDescription>,
+}
+
+#[derive(Debug, Clone)]
+pub enum Reset {
+    /// Place object in room: O <if_flag> <obj_vnum> <limit> <room_vnum>
+    ObjectInRoom {
+        if_flag: i32,
+        obj_vnum: i32,
+        limit: i32,
+        room_vnum: i32,
+    },
+    /// Spawn mobile: M <if_flag> <mob_vnum> <limit> <room_vnum> <max_in_room>
+    Mobile {
+        if_flag: i32,
+        mob_vnum: i32,
+        limit: i32,
+        room_vnum: i32,
+        max_in_room: i32,
+    },
+    /// Give object to mobile: G <if_flag> <obj_vnum> <limit>
+    GiveObject {
+        if_flag: i32,
+        obj_vnum: i32,
+        limit: i32,
+    },
+    /// Equip object on mobile: E <if_flag> <obj_vnum> <limit> <wear_location>
+    EquipObject {
+        if_flag: i32,
+        obj_vnum: i32,
+        limit: i32,
+        wear_location: i32,
+    },
+    /// Put object in container: P <if_flag> <obj_vnum> <limit> <container_vnum>
+    PutInContainer {
+        if_flag: i32,
+        obj_vnum: i32,
+        limit: i32,
+        container_vnum: i32,
+    },
+    /// Door reset: D <room_vnum> <direction> <state>
+    Door {
+        room_vnum: i32,
+        direction: i32,
+        state: i32,
+    },
+    /// Randomize exits: R <room_vnum> <num_exits>
+    RandomizeExits {
+        room_vnum: i32,
+        num_exits: i32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -229,6 +280,9 @@ pub enum ParseError {
 
     #[error("Invalid object weight/cost line")]
     InvalidObjectWeightCost,
+
+    #[error("Invalid reset command")]
+    InvalidResetCommand,
 
     #[error("Parse integer error: {0}")]
     ParseInt(#[from] std::num::ParseIntError),

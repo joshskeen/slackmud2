@@ -3,6 +3,7 @@ use crate::slack::{SlashCommand, Block};
 use crate::db::player::PlayerRepository;
 use crate::db::room::RoomRepository;
 use crate::db::exit::ExitRepository;
+use crate::db::object::{ObjectRepository, ObjectInstanceRepository};
 use crate::models::Player;
 use std::sync::Arc;
 use anyhow::Result;
@@ -155,6 +156,8 @@ async fn send_room_description(
 ) -> Result<()> {
     let exit_repo = ExitRepository::new(state.db_pool.clone());
     let room_repo = RoomRepository::new(state.db_pool.clone());
+    let object_instance_repo = ObjectInstanceRepository::new(state.db_pool.clone());
+    let object_repo = ObjectRepository::new(state.db_pool.clone());
 
     // Get full room details to check for attached channel
     let room = room_repo.get_by_channel_id(room_channel_id).await?;
@@ -223,6 +226,19 @@ async fn send_room_description(
         blocks.push(Block::section(&players_text));
     } else {
         blocks.push(Block::section("*Players here:*\n_You are alone._"));
+    }
+
+    // Add objects in room section
+    let object_instances = object_instance_repo.get_in_room(room_channel_id).await?;
+    if !object_instances.is_empty() {
+        let mut objects_text = String::from("*Items here:*\n");
+        for instance in &object_instances {
+            // Get the object definition
+            if let Some(object) = object_repo.get_by_vnum(instance.object_vnum).await? {
+                objects_text.push_str(&format!("• {}\n", object.long_description));
+            }
+        }
+        blocks.push(Block::section(&objects_text));
     }
 
     let dm_text = format!("You look around #{}", room_name);

@@ -22,6 +22,10 @@ pub fn parse_area_file(content: &str) -> Result<AreaFile, ParseError> {
                 lines.next(); // Consume #OBJECTS
                 area.objects = parse_objects(&mut lines)?;
             }
+            "#RESETS" => {
+                lines.next(); // Consume #RESETS
+                area.resets = parse_resets(&mut lines)?;
+            }
             "#$" => break, // End of file
             _ => {
                 lines.next(); // Skip unknown sections
@@ -430,6 +434,144 @@ fn parse_object_weight_line(line: &str) -> Result<(i32, i32, i32, String), Parse
     let condition = parts[3].to_string();
 
     Ok((weight, cost, level, condition))
+}
+
+fn parse_resets<'a, I>(lines: &mut Peekable<I>) -> Result<Vec<Reset>, ParseError>
+where
+    I: Iterator<Item = &'a str>,
+{
+    let mut resets = Vec::new();
+
+    while let Some(&line) = lines.peek() {
+        let trimmed = line.trim();
+
+        // Check for section end
+        if trimmed.starts_with("#SHOPS")
+            || trimmed.starts_with("#SPECIALS")
+            || trimmed.starts_with("#$")
+            || trimmed == "S"
+        {
+            break;
+        }
+
+        // Skip comments
+        if trimmed.starts_with('*') || trimmed.is_empty() {
+            lines.next();
+            continue;
+        }
+
+        // Parse reset command
+        if let Some(reset) = parse_single_reset(line)? {
+            resets.push(reset);
+        }
+        lines.next();
+    }
+
+    Ok(resets)
+}
+
+fn parse_single_reset(line: &str) -> Result<Option<Reset>, ParseError> {
+    let line = line.trim();
+
+    // Remove trailing comment if present
+    let line = if let Some(idx) = line.find('*') {
+        &line[..idx].trim()
+    } else {
+        line
+    };
+
+    let parts: Vec<&str> = line.split_whitespace().collect();
+
+    if parts.is_empty() {
+        return Ok(None);
+    }
+
+    let command = parts[0];
+
+    match command {
+        "M" => {
+            // Mobile: M <if_flag> <mob_vnum> <limit> <room_vnum> <max_in_room>
+            if parts.len() < 6 {
+                return Err(ParseError::InvalidResetCommand);
+            }
+            Ok(Some(Reset::Mobile {
+                if_flag: parts[1].parse()?,
+                mob_vnum: parts[2].parse()?,
+                limit: parts[3].parse()?,
+                room_vnum: parts[4].parse()?,
+                max_in_room: parts[5].parse()?,
+            }))
+        }
+        "O" => {
+            // Object in room: O <if_flag> <obj_vnum> <limit> <room_vnum>
+            if parts.len() < 5 {
+                return Err(ParseError::InvalidResetCommand);
+            }
+            Ok(Some(Reset::ObjectInRoom {
+                if_flag: parts[1].parse()?,
+                obj_vnum: parts[2].parse()?,
+                limit: parts[3].parse()?,
+                room_vnum: parts[4].parse()?,
+            }))
+        }
+        "G" => {
+            // Give object: G <if_flag> <obj_vnum> <limit>
+            if parts.len() < 4 {
+                return Err(ParseError::InvalidResetCommand);
+            }
+            Ok(Some(Reset::GiveObject {
+                if_flag: parts[1].parse()?,
+                obj_vnum: parts[2].parse()?,
+                limit: parts[3].parse()?,
+            }))
+        }
+        "E" => {
+            // Equip object: E <if_flag> <obj_vnum> <limit> <wear_location>
+            if parts.len() < 5 {
+                return Err(ParseError::InvalidResetCommand);
+            }
+            Ok(Some(Reset::EquipObject {
+                if_flag: parts[1].parse()?,
+                obj_vnum: parts[2].parse()?,
+                limit: parts[3].parse()?,
+                wear_location: parts[4].parse()?,
+            }))
+        }
+        "P" => {
+            // Put in container: P <if_flag> <obj_vnum> <limit> <container_vnum>
+            if parts.len() < 5 {
+                return Err(ParseError::InvalidResetCommand);
+            }
+            Ok(Some(Reset::PutInContainer {
+                if_flag: parts[1].parse()?,
+                obj_vnum: parts[2].parse()?,
+                limit: parts[3].parse()?,
+                container_vnum: parts[4].parse()?,
+            }))
+        }
+        "D" => {
+            // Door: D <room_vnum> <direction> <state>
+            if parts.len() < 4 {
+                return Err(ParseError::InvalidResetCommand);
+            }
+            Ok(Some(Reset::Door {
+                room_vnum: parts[1].parse()?,
+                direction: parts[2].parse()?,
+                state: parts[3].parse()?,
+            }))
+        }
+        "R" => {
+            // Randomize exits: R <room_vnum> <num_exits>
+            if parts.len() < 3 {
+                return Err(ParseError::InvalidResetCommand);
+            }
+            Ok(Some(Reset::RandomizeExits {
+                room_vnum: parts[1].parse()?,
+                num_exits: parts[2].parse()?,
+            }))
+        }
+        _ => Ok(None), // Unknown command, skip it
+    }
 }
 
 #[cfg(test)]

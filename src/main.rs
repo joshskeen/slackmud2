@@ -168,14 +168,16 @@ async fn load_default_areas(pool: &sqlx::PgPool) -> Result<()> {
     use db::area::AreaRepository;
     use db::room::RoomRepository;
     use db::exit::ExitRepository;
-    use db::object::ObjectRepository;
+    use db::object::{ObjectRepository, ObjectInstanceRepository};
     use area::parser::parse_area_file;
-    use models::{Room, Exit, Area, Object};
+    use area::types::Reset;
+    use models::{Room, Exit, Area, Object, ObjectInstance};
 
     let area_repo = AreaRepository::new(pool.clone());
     let room_repo = RoomRepository::new(pool.clone());
     let exit_repo = ExitRepository::new(pool.clone());
     let object_repo = ObjectRepository::new(pool.clone());
+    let object_instance_repo = ObjectInstanceRepository::new(pool.clone());
 
     // Embed the midgaard.are file directly in the binary
     const MIDGAARD_CONTENT: &str = include_str!("../data/areas/midgaard.are");
@@ -193,11 +195,13 @@ async fn load_default_areas(pool: &sqlx::PgPool) -> Result<()> {
         return Ok(());
     }
 
-    tracing::info!("Importing area '{}' ({} rooms, {} objects)...", area_name, area_file.rooms.len(), area_file.objects.len());
+    tracing::info!("Importing area '{}' ({} rooms, {} objects, {} resets)...",
+        area_name, area_file.rooms.len(), area_file.objects.len(), area_file.resets.len());
 
     let mut rooms_created = 0;
     let mut exits_created = 0;
     let mut objects_created = 0;
+    let mut instances_spawned = 0;
 
     // First pass: Create all rooms
     for area_room in &area_file.rooms {
@@ -268,6 +272,30 @@ async fn load_default_areas(pool: &sqlx::PgPool) -> Result<()> {
         objects_created += 1;
     }
 
+    // Fourth pass: Process resets and spawn object instances
+    for reset in &area_file.resets {
+        match reset {
+            Reset::ObjectInRoom { obj_vnum, room_vnum, .. } => {
+                // Spawn object in room
+                let room_id = format!("vnum_{}", room_vnum);
+
+                // Skip if room doesn't exist (outside area range)
+                if *room_vnum < area_file.header.min_vnum || *room_vnum > area_file.header.max_vnum {
+                    continue;
+                }
+
+                // Create object instance
+                let instance = ObjectInstance::new_in_room(*obj_vnum, room_id);
+                object_instance_repo.create(&instance).await?;
+                instances_spawned += 1;
+            }
+            _ => {
+                // Skip other reset types for now (mobs, give, equip, etc.)
+                // We'll implement these when we have mobs
+            }
+        }
+    }
+
     // Record the area in the database
     let area = Area::new(
         area_file.header.name.clone(),
@@ -280,11 +308,12 @@ async fn load_default_areas(pool: &sqlx::PgPool) -> Result<()> {
     area_repo.create(&area).await?;
 
     tracing::info!(
-        "Successfully imported area '{}': {} rooms, {} exits, {} objects",
+        "Successfully imported area '{}': {} rooms, {} exits, {} objects, {} instances spawned",
         area_name,
         rooms_created,
         exits_created,
-        objects_created
+        objects_created,
+        instances_spawned
     );
 
     Ok(())
