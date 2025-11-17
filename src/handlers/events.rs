@@ -91,6 +91,14 @@ async fn handle_message_event(
                 user_id.clone(),
             ).await
         }
+        "move" | "go" | "m" => {
+            super::r#move::handle_move_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                _args,
+            ).await
+        }
         "dig" => {
             super::dig::handle_dig_dm(
                 state.clone(),
@@ -105,7 +113,7 @@ async fn handle_message_event(
         _ => {
             // Unknown command
             let help_text = format!(
-                "Unknown command: `{}`. Try:\n• `look` - Look around\n• `character` - View character\n• `dig` - (Wizards) Create exit\n• `help` - Show help",
+                "Unknown command: `{}`. Try:\n• `look` - Look around\n• `move <dir>` - Move in a direction\n• `character` - View character\n• `dig` - (Wizards) Create exit\n• `help` - Show help",
                 command
             );
             state.slack_client.send_dm(&user_id, &help_text).await
@@ -125,7 +133,9 @@ async fn handle_help_dm(state: Arc<AppState>, user_id: String) -> anyhow::Result
     let help_text = r#"*SlackMUD Commands*
 
 • `look` or `l` - Look around the current room
+• `move <direction>` or `go <direction>` - Move in a direction (north, south, east, west, up, down)
 • `character` or `c` - View your character info
+• `dig <direction> #channel` - (Wizards only) Create an exit
 • `help` or `h` - Show this help message
 
 You can also use `/mud` slash commands in any channel!"#;
