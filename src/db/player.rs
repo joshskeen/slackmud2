@@ -83,4 +83,13 @@ impl PlayerRepository {
             Ok(player)
         }
     }
+
+    pub async fn get_players_in_room(&self, channel_id: &str) -> Result<Vec<Player>, sqlx::Error> {
+        sqlx::query_as::<_, Player>(
+            "SELECT * FROM players WHERE current_channel_id = $1 ORDER BY name"
+        )
+        .bind(channel_id)
+        .fetch_all(&self.pool)
+        .await
+    }
 }
