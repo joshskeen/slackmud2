@@ -97,7 +97,7 @@ pub async fn handle_dig(state: Arc<AppState>, command: SlashCommand, args: &str)
     ).await?;
 
     // Create the exit
-    let exit = Exit::new(from_room_id.clone(), direction.clone(), to_room.channel_id.clone(), player.slack_user_id.clone());
+    let exit = Exit::new(from_room_id.clone(), direction.clone(), to_room.channel_id.clone(), Some(player.slack_user_id.clone()));
     exit_repo.create(&exit).await?;
 
     // Get current room info
@@ -205,7 +205,7 @@ pub async fn handle_dig_dm(
     ).await?;
 
     // Create the exit
-    let exit = Exit::new(from_room_id.clone(), direction.clone(), to_room.channel_id.clone(), player.slack_user_id.clone());
+    let exit = Exit::new(from_room_id.clone(), direction.clone(), to_room.channel_id.clone(), Some(player.slack_user_id.clone()));
     exit_repo.create(&exit).await?;
 
     // Get current room info

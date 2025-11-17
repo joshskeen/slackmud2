@@ -224,7 +224,7 @@ async fn import_area_from_content(
                 room_id.clone(),
                 area_exit.direction.as_str().to_string(),
                 to_room_id,
-                player_slack_id.clone(),
+                Some(player_slack_id.clone()),
             );
 
             exit_repo.create(&exit).await?;

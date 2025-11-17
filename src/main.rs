@@ -224,7 +224,7 @@ async fn load_default_areas(pool: &sqlx::PgPool) -> Result<()> {
                 room_id.clone(),
                 area_exit.direction.as_str().to_string(),
                 to_room_id,
-                "system".to_string(), // System-created exit
+                None, // System-created exit
             );
 
             exit_repo.create(&exit).await?;

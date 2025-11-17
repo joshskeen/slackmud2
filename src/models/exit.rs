@@ -8,11 +8,11 @@ pub struct Exit {
     pub direction: String,
     pub to_room_id: String,
     pub created_at: i64,
-    pub created_by: String,
+    pub created_by: Option<String>,
 }
 
 impl Exit {
-    pub fn new(from_room_id: String, direction: String, to_room_id: String, created_by: String) -> Self {
+    pub fn new(from_room_id: String, direction: String, to_room_id: String, created_by: Option<String>) -> Self {
         let now = chrono::Utc::now().timestamp();
         Self {
             id: 0, // Will be set by database
