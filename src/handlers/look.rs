@@ -156,13 +156,34 @@ async fn send_room_description(
     let exit_repo = ExitRepository::new(state.db_pool.clone());
     let room_repo = RoomRepository::new(state.db_pool.clone());
 
-    // Build room title - show vnum for wizards
+    // Get full room details to check for attached channel
+    let room = room_repo.get_by_channel_id(room_channel_id).await?;
+
+    // Build room title - show vnum and attached channel for wizards
     let room_title = if current_player.level >= 50 {
         // Extract vnum from channel_id (format: vnum_3014)
         if let Some(vnum) = room_channel_id.strip_prefix("vnum_") {
-            format!("*You look around #{} [`{}`]*", room_name, vnum)
+            // Check if room has an attached channel
+            if let Some(ref room_data) = room {
+                if let Some(ref attached_channel) = room_data.attached_channel_id {
+                    format!("*You look around #{} [`{}` | attached to <#{}>]*", room_name, vnum, attached_channel)
+                } else {
+                    format!("*You look around #{} [`{}`]*", room_name, vnum)
+                }
+            } else {
+                format!("*You look around #{} [`{}`]*", room_name, vnum)
+            }
         } else {
-            format!("*You look around #{} [non-vnum room]*", room_name)
+            // Non-vnum room - check for attached channel
+            if let Some(ref room_data) = room {
+                if let Some(ref attached_channel) = room_data.attached_channel_id {
+                    format!("*You look around #{} [non-vnum | attached to <#{}>]*", room_name, attached_channel)
+                } else {
+                    format!("*You look around #{} [non-vnum room]*", room_name)
+                }
+            } else {
+                format!("*You look around #{} [non-vnum room]*", room_name)
+            }
         }
     } else {
         format!("*You look around #{}*", room_name)
