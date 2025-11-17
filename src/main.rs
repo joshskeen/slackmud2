@@ -196,7 +196,7 @@ async fn load_default_areas(pool: &sqlx::PgPool) -> Result<()> {
     let mut rooms_created = 0;
     let mut exits_created = 0;
 
-    // Import rooms and exits
+    // First pass: Create all rooms
     for area_room in &area_file.rooms {
         let room_id = format!("vnum_{}", area_room.vnum);
 
@@ -211,8 +211,12 @@ async fn load_default_areas(pool: &sqlx::PgPool) -> Result<()> {
 
         room_repo.create(&room).await?;
         rooms_created += 1;
+    }
 
-        // Create exits
+    // Second pass: Create all exits (now that all rooms exist)
+    for area_room in &area_file.rooms {
+        let room_id = format!("vnum_{}", area_room.vnum);
+
         for area_exit in &area_room.exits {
             let to_room_id = format!("vnum_{}", area_exit.to_room);
 

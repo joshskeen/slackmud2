@@ -196,8 +196,8 @@ async fn import_area_from_content(
     let mut rooms_created = 0;
     let mut exits_created = 0;
 
+    // First pass: Create all rooms
     for area_room in &area_file.rooms {
-        // Convert AreaRoom to our Room model
         let room_id = format!("vnum_{}", area_room.vnum);
 
         let room = Room {
@@ -209,11 +209,14 @@ async fn import_area_from_content(
             updated_at: chrono::Utc::now().timestamp(),
         };
 
-        // Create room
         room_repo.create(&room).await?;
         rooms_created += 1;
+    }
 
-        // Create exits
+    // Second pass: Create all exits (now that all rooms exist)
+    for area_room in &area_file.rooms {
+        let room_id = format!("vnum_{}", area_room.vnum);
+
         for area_exit in &area_room.exits {
             let to_room_id = format!("vnum_{}", area_exit.to_room);
 
