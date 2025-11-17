@@ -15,6 +15,7 @@ RUN cargo build --release && rm -rf src
 # Copy source code
 COPY src ./src
 COPY migrations ./migrations
+COPY data ./data
 
 # Build the application
 RUN touch src/main.rs && cargo build --release
