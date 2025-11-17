@@ -189,10 +189,43 @@ async fn load_default_areas(pool: &sqlx::PgPool) -> Result<()> {
 
     let area_name = &area_file.header.name;
 
-    // Check if already imported
-    if area_repo.exists(area_name).await? {
-        tracing::info!("Area '{}' already imported, skipping", area_name);
-        return Ok(());
+    // Check for development mode - force reimport if enabled
+    let force_reimport = std::env::var("FORCE_REIMPORT_AREAS")
+        .unwrap_or_else(|_| "false".to_string())
+        .parse::<bool>()
+        .unwrap_or(false);
+
+    if force_reimport {
+        tracing::warn!("FORCE_REIMPORT_AREAS is enabled - deleting and reimporting area '{}'", area_name);
+
+        // Delete existing area and all associated data
+        if area_repo.exists(area_name).await? {
+            // Delete object instances first
+            sqlx::query(
+                "DELETE FROM object_instances WHERE object_vnum IN
+                 (SELECT vnum FROM objects WHERE area_name = $1)"
+            )
+            .bind(area_name)
+            .execute(pool)
+            .await?;
+
+            // Delete object definitions
+            sqlx::query("DELETE FROM objects WHERE area_name = $1")
+                .bind(area_name)
+                .execute(pool)
+                .await?;
+
+            // Delete area (cascades to rooms and exits)
+            area_repo.delete_by_name(area_name).await?;
+
+            tracing::info!("Deleted existing area '{}' and all associated data", area_name);
+        }
+    } else {
+        // Normal production behavior - skip if already imported
+        if area_repo.exists(area_name).await? {
+            tracing::info!("Area '{}' already imported, skipping", area_name);
+            return Ok(());
+        }
     }
 
     tracing::info!("Importing area '{}' ({} rooms, {} objects, {} resets)...",
