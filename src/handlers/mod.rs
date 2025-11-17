@@ -5,6 +5,7 @@ mod dig;
 mod r#move;
 mod attach;
 mod import;
+mod teleport;
 
 pub use events::handle_events;
 
@@ -74,6 +75,7 @@ pub async fn handle_slash_command(
         "detach" => attach::handle_detach(state, command.clone()).await,
         "import-area" => import::handle_import_area(state, command.clone(), args).await,
         "vnums" => import::handle_vnums(state, command.clone(), args).await,
+        "teleport" | "tp" => teleport::handle_teleport(state, command.clone(), args).await,
         "move" | "go" | "m" => r#move::handle_move(state, command.clone(), args).await,
         // Directional shortcuts
         "north" | "n" => r#move::handle_move(state, command.clone(), "north").await,
@@ -167,6 +169,8 @@ async fn handle_help(state: Arc<AppState>, command: SlashCommand) -> anyhow::Res
         help_text.push_str("• `/mud detach` - Detach current room from its Slack channel\n");
         help_text.push_str("• `/mud import-area <url>` - Import MUD area file (creates virtual rooms)\n");
         help_text.push_str("• `/mud vnums [page]` - List all imported virtual rooms\n");
+        help_text.push_str("• `/mud teleport <vnum>` - Teleport yourself to a room\n");
+        help_text.push_str("• `/mud teleport <player> <vnum>` - Teleport another player to a room\n");
     }
 
     help_text.push_str("\n• `/mud help` - Show this help message\n");

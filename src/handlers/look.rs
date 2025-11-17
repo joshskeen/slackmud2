@@ -17,8 +17,8 @@ pub async fn handle_look(state: Arc<AppState>, command: SlashCommand) -> Result<
     let player = player_repo.get_or_create(command.user_id.clone(), real_name).await?;
 
     // Check if player has a current room
-    let channel_id = match player.current_channel_id {
-        Some(id) => id,
+    let channel_id = match &player.current_channel_id {
+        Some(id) => id.clone(),
         None => {
             // First time player - set their room to where they used the command
             player_repo.update_current_channel(&player.slack_user_id, &command.channel_id).await?;
@@ -61,7 +61,7 @@ pub async fn handle_look(state: Arc<AppState>, command: SlashCommand) -> Result<
         &room.description,
         &room.channel_id,
         &players_in_room,
-        &player.slack_user_id,
+        &player,
     ).await?;
 
     // Post public action to the player's current room (broadcasts to channel and players in room via DM)
@@ -85,8 +85,8 @@ pub async fn handle_look_dm(
     let player = player_repo.get_or_create(user_id.clone(), user_name).await?;
 
     // Check if player has a current room
-    let channel_id = match player.current_channel_id {
-        Some(id) => id,
+    let channel_id = match &player.current_channel_id {
+        Some(id) => id.clone(),
         None => {
             state.slack_client.send_dm(
                 &user_id,
@@ -119,7 +119,7 @@ pub async fn handle_look_dm(
         &room.description,
         &room.channel_id,
         &players_in_room,
-        &player.slack_user_id,
+        &player,
     ).await?;
 
     // Post public action to the player's current room (broadcasts to channel and players in room via DM)
@@ -137,13 +137,25 @@ async fn send_room_description(
     room_description: &str,
     room_channel_id: &str,
     players_in_room: &[Player],
-    current_player_id: &str,
+    current_player: &Player,
 ) -> Result<()> {
     let exit_repo = ExitRepository::new(state.db_pool.clone());
     let room_repo = RoomRepository::new(state.db_pool.clone());
 
+    // Build room title - show vnum for wizards
+    let room_title = if current_player.level >= 50 {
+        // Extract vnum from channel_id (format: vnum_3014)
+        if let Some(vnum) = room_channel_id.strip_prefix("vnum_") {
+            format!("*You look around #{} [`{}`]*", room_name, vnum)
+        } else {
+            format!("*You look around #{} [non-vnum room]*", room_name)
+        }
+    } else {
+        format!("*You look around #{}*", room_name)
+    };
+
     let mut blocks = vec![
-        Block::section(&format!("*You look around #{}*", room_name)),
+        Block::section(&room_title),
         Block::section(room_description),
     ];
 
@@ -167,7 +179,7 @@ async fn send_room_description(
     if !players_in_room.is_empty() {
         let mut players_text = String::from("*Players here:*\n");
         for player in players_in_room {
-            if player.slack_user_id == current_player_id {
+            if player.slack_user_id == current_player.slack_user_id {
                 players_text.push_str(&format!("• {} (you)\n", player.name));
             } else {
                 players_text.push_str(&format!("• {}\n", player.name));
