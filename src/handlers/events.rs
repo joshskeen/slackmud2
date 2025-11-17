@@ -108,12 +108,64 @@ async fn handle_message_event(
                 user_id.clone(),
             ).await
         }
+        "exits" => {
+            handle_exits_dm(state.clone(), user_id.clone(), user_name).await
+        }
         "move" | "go" | "m" => {
             super::r#move::handle_move_dm(
                 state.clone(),
                 user_id.clone(),
                 user_name,
                 _args,
+            ).await
+        }
+        // Directional shortcuts - move commands
+        "north" | "n" => {
+            super::r#move::handle_move_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                "north",
+            ).await
+        }
+        "south" | "s" => {
+            super::r#move::handle_move_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                "south",
+            ).await
+        }
+        "east" | "e" => {
+            super::r#move::handle_move_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                "east",
+            ).await
+        }
+        "west" | "w" => {
+            super::r#move::handle_move_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                "west",
+            ).await
+        }
+        "up" | "u" => {
+            super::r#move::handle_move_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                "up",
+            ).await
+        }
+        "down" | "d" => {
+            super::r#move::handle_move_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                "down",
             ).await
         }
         "dig" => {
@@ -130,7 +182,7 @@ async fn handle_message_event(
         _ => {
             // Unknown command
             let help_text = format!(
-                "Unknown command: `{}`. Try:\n• `look` - Look around\n• `move <dir>` - Move in a direction\n• `character` - View character\n• `dig` - (Wizards) Create exit\n• `help` - Show help",
+                "Unknown command: `{}`. Try:\n• `look` - Look around\n• `n/s/e/w/u/d` - Move in a direction\n• `exits` - Show available exits\n• `character` - View character\n• `help` - Show help",
                 command
             );
             state.slack_client.send_dm(&user_id, &help_text).await
@@ -146,11 +198,62 @@ async fn handle_message_event(
     }
 }
 
+async fn handle_exits_dm(state: Arc<AppState>, user_id: String, user_name: String) -> anyhow::Result<()> {
+    use crate::db::player::PlayerRepository;
+    use crate::db::room::RoomRepository;
+    use crate::db::exit::ExitRepository;
+
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+    let room_repo = RoomRepository::new(state.db_pool.clone());
+    let exit_repo = ExitRepository::new(state.db_pool.clone());
+
+    // Get player
+    let player = player_repo.get_or_create(user_id.clone(), user_name).await?;
+
+    // Check if player has a current room
+    let channel_id = match player.current_channel_id {
+        Some(id) => id,
+        None => {
+            state.slack_client.send_dm(
+                &user_id,
+                "You need to be in a room first! Use `/mud look` in a channel to enter a room."
+            ).await?;
+            return Ok(());
+        }
+    };
+
+    // Get the room
+    let room = room_repo.get_by_channel_id(&channel_id).await?;
+    let room_name = room.as_ref().map(|r| r.channel_name.as_str()).unwrap_or("unknown");
+
+    // Get exits
+    let exits = exit_repo.get_exits_from_room(&channel_id).await?;
+
+    let message = if exits.is_empty() {
+        format!("*Exits from #{}:*\nThere are no exits from this room.", room_name)
+    } else {
+        let mut msg = format!("*Exits from #{}:*\n", room_name);
+        for exit in &exits {
+            let target_room_name = if let Some(room) = room_repo.get_by_channel_id(&exit.to_room_id).await? {
+                room.channel_name
+            } else {
+                exit.to_room_id.clone()
+            };
+            msg.push_str(&format!("• *{}* → #{}\n", exit.direction, target_room_name));
+        }
+        msg
+    };
+
+    state.slack_client.send_dm(&user_id, &message).await?;
+    Ok(())
+}
+
 async fn handle_help_dm(state: Arc<AppState>, user_id: String) -> anyhow::Result<()> {
     let help_text = r#"*SlackMUD Commands*
 
 • `look` or `l` - Look around the current room
-• `move <direction>` or `go <direction>` - Move in a direction (north, south, east, west, up, down)
+• `exits` - Show available exits
+• `n/s/e/w/u/d` or `north/south/east/west/up/down` - Move in a direction
 • `character` or `c` - View your character info
 • `dig <direction> #channel` - (Wizards only) Create an exit
 • `help` or `h` - Show this help message

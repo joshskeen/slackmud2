@@ -56,9 +56,17 @@ pub async fn handle_slash_command(
 
     let result = match subcommand {
         "look" | "l" => look::handle_look(state, command).await,
+        "exits" => handle_exits(state, command).await,
         "character" | "char" => character::handle_character(state, command).await,
         "dig" => dig::handle_dig(state, command.clone(), args).await,
         "move" | "go" | "m" => r#move::handle_move(state, command.clone(), args).await,
+        // Directional shortcuts
+        "north" | "n" => r#move::handle_move(state, command.clone(), "north").await,
+        "south" | "s" => r#move::handle_move(state, command.clone(), "south").await,
+        "east" | "e" => r#move::handle_move(state, command.clone(), "east").await,
+        "west" | "w" => r#move::handle_move(state, command.clone(), "west").await,
+        "up" | "u" => r#move::handle_move(state, command.clone(), "up").await,
+        "down" | "d" => r#move::handle_move(state, command.clone(), "down").await,
         "" | "help" => handle_help(state, command).await,
         _ => {
             Err(anyhow::anyhow!("Unknown command: `{}`. Type `/mud help` for available commands.", subcommand))
@@ -74,11 +82,62 @@ pub async fn handle_slash_command(
     }
 }
 
+async fn handle_exits(state: Arc<AppState>, command: SlashCommand) -> anyhow::Result<()> {
+    use crate::db::room::RoomRepository;
+    use crate::db::exit::ExitRepository;
+
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+    let room_repo = RoomRepository::new(state.db_pool.clone());
+    let exit_repo = ExitRepository::new(state.db_pool.clone());
+
+    // Get player
+    let real_name = state.slack_client.get_user_real_name(&command.user_id).await?;
+    let player = player_repo.get_or_create(command.user_id.clone(), real_name).await?;
+
+    // Check if player has a current room
+    let channel_id = match player.current_channel_id {
+        Some(id) => id,
+        None => {
+            state.slack_client.send_dm(
+                &command.user_id,
+                "You need to be in a room first! Use `/mud look` in a channel to enter a room."
+            ).await?;
+            return Ok(());
+        }
+    };
+
+    // Get the room
+    let room = room_repo.get_by_channel_id(&channel_id).await?;
+    let room_name = room.as_ref().map(|r| r.channel_name.as_str()).unwrap_or("unknown");
+
+    // Get exits
+    let exits = exit_repo.get_exits_from_room(&channel_id).await?;
+
+    let message = if exits.is_empty() {
+        format!("*Exits from #{}:*\nThere are no exits from this room.", room_name)
+    } else {
+        let mut msg = format!("*Exits from #{}:*\n", room_name);
+        for exit in &exits {
+            let target_room_name = if let Some(room) = room_repo.get_by_channel_id(&exit.to_room_id).await? {
+                room.channel_name
+            } else {
+                exit.to_room_id.clone()
+            };
+            msg.push_str(&format!("• *{}* → #{}\n", exit.direction, target_room_name));
+        }
+        msg
+    };
+
+    state.slack_client.send_dm(&command.user_id, &message).await?;
+    Ok(())
+}
+
 async fn handle_help(state: Arc<AppState>, command: SlashCommand) -> anyhow::Result<()> {
     let help_text = r#"*SlackMUD Commands*
 
 • `/mud look` or `/mud l` - Look around the current room
-• `/mud move <direction>` or `/mud go <direction>` - Move in a direction (north, south, east, west, up, down)
+• `/mud exits` - Show available exits
+• `/mud n/s/e/w/u/d` or `/mud north/south/east/west/up/down` - Move in a direction
 • `/mud character` or `/mud char` - Customize your character (class, race, gender)
 • `/mud dig <direction> #channel` - (Wizards only) Create an exit to another room
 • `/mud help` - Show this help message
