@@ -34,3 +34,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Date/time
 chrono = "0.4"
+
+# Bitflags for flags
+bitflags = "2.6"

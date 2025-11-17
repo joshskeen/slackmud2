@@ -2,6 +2,7 @@ mod models;
 mod db;
 mod slack;
 mod handlers;
+mod area;
 
 use anyhow::{Context, Result};
 use axum::{
