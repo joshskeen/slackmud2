@@ -10,6 +10,20 @@ use anyhow::Result;
 
 /// Handle look command from slash command
 pub async fn handle_look(state: Arc<AppState>, command: SlashCommand) -> Result<()> {
+    // Parse command to check for object argument
+    let (_, args) = command.parse_subcommand();
+    let args = args.trim();
+
+    // If there's an argument, look at that object
+    if !args.is_empty() {
+        return handle_look_at_object(
+            state,
+            &command.user_id,
+            args,
+        ).await;
+    }
+
+    // Otherwise, look at the room
     let player_repo = PlayerRepository::new(state.db_pool.clone());
     let room_repo = RoomRepository::new(state.db_pool.clone());
 
@@ -84,8 +98,20 @@ pub async fn handle_look_dm(
     state: Arc<AppState>,
     user_id: String,
     user_name: String,
-    _dm_channel: String,
+    args: &str,
 ) -> Result<()> {
+    let args = args.trim();
+
+    // If there's an argument, look at that object
+    if !args.is_empty() {
+        return handle_look_at_object(
+            state,
+            &user_id,
+            args,
+        ).await;
+    }
+
+    // Otherwise, look at the room
     let player_repo = PlayerRepository::new(state.db_pool.clone());
     let room_repo = RoomRepository::new(state.db_pool.clone());
 
@@ -243,6 +269,108 @@ async fn send_room_description(
 
     let dm_text = format!("You look around #{}", room_name);
     state.slack_client.send_dm_with_blocks(user_id, &dm_text, blocks).await?;
+
+    Ok(())
+}
+
+/// Handle looking at a specific object
+async fn handle_look_at_object(
+    state: Arc<AppState>,
+    user_id: &str,
+    object_name: &str,
+) -> Result<()> {
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+    let object_repo = ObjectRepository::new(state.db_pool.clone());
+    let object_instance_repo = ObjectInstanceRepository::new(state.db_pool.clone());
+
+    // Get player
+    let real_name = state.slack_client.get_user_real_name(user_id).await?;
+    let player = player_repo.get_or_create(user_id.to_string(), real_name).await?;
+
+    // Check if player has a current room
+    let room_id = match player.current_channel_id {
+        Some(id) => id,
+        None => {
+            state.slack_client.send_dm(
+                user_id,
+                "You need to be in a room first! Use `/mud look` in a channel to enter a room."
+            ).await?;
+            return Ok(());
+        }
+    };
+
+    // Search for object in player's inventory first
+    let inventory_instances = object_instance_repo.get_in_player_inventory(&player.slack_user_id).await?;
+    for instance in &inventory_instances {
+        if let Some(object) = object_repo.get_by_vnum(instance.object_vnum).await? {
+            if object.matches_keyword(object_name) {
+                // Found in inventory
+                send_object_description(&state, user_id, &object, "inventory").await?;
+                return Ok(());
+            }
+        }
+    }
+
+    // Search for object in current room
+    let room_instances = object_instance_repo.get_in_room(&room_id).await?;
+    for instance in &room_instances {
+        if let Some(object) = object_repo.get_by_vnum(instance.object_vnum).await? {
+            if object.matches_keyword(object_name) {
+                // Found in room
+                send_object_description(&state, user_id, &object, "room").await?;
+                return Ok(());
+            }
+        }
+    }
+
+    // Not found
+    state.slack_client.send_dm(
+        user_id,
+        &format!("You don't see '{}' here.", object_name)
+    ).await?;
+
+    Ok(())
+}
+
+/// Send detailed description of an object to the player
+async fn send_object_description(
+    state: &Arc<AppState>,
+    user_id: &str,
+    object: &crate::models::Object,
+    location: &str,
+) -> Result<()> {
+    let location_text = match location {
+        "inventory" => "You are carrying:",
+        "room" => "You examine:",
+        _ => "You see:",
+    };
+
+    let mut description = format!("*{}*\n", location_text);
+    description.push_str(&format!("*{}*\n\n", object.short_description));
+    description.push_str(&format!("{}\n\n", object.long_description));
+    description.push_str(&format!("*Item Type:* {}\n", object.item_type));
+    description.push_str(&format!("*Material:* {}\n", object.material));
+    description.push_str(&format!("*Weight:* {} lbs\n", object.weight));
+
+    if object.level > 0 {
+        description.push_str(&format!("*Level:* {}\n", object.level));
+    }
+
+    if object.cost > 0 {
+        description.push_str(&format!("*Value:* {} gold\n", object.cost));
+    }
+
+    // Show extra flags if present
+    if !object.extra_flags.is_empty() && object.extra_flags != "0" {
+        description.push_str(&format!("*Flags:* {}\n", object.extra_flags));
+    }
+
+    // Show wear locations if it can be worn
+    if !object.wear_flags.is_empty() && object.wear_flags != "0" {
+        description.push_str(&format!("*Can be worn:* {}\n", object.wear_flags));
+    }
+
+    state.slack_client.send_dm(user_id, &description).await?;
 
     Ok(())
 }

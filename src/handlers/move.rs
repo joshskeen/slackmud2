@@ -200,8 +200,7 @@ pub async fn handle_move_dm(
     ).await?;
 
     // Automatically show the new room description
-    let dm_channel = String::new(); // Not used in handle_look_dm
-    super::look::handle_look_dm(state, user_id, player.name, dm_channel).await?;
+    super::look::handle_look_dm(state, user_id, player.name, "").await?;
 
     Ok(())
 }

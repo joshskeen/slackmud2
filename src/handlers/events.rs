@@ -99,7 +99,7 @@ async fn handle_message_event(
                 state.clone(),
                 user_id.clone(),
                 user_name,
-                msg_event.channel.clone(),
+                _args,
             ).await
         }
         "character" | "char" | "c" => {
@@ -325,6 +325,7 @@ async fn handle_help_dm(state: Arc<AppState>, user_id: String) -> anyhow::Result
 
     let mut help_text = String::from("*SlackMUD Commands*\n\n");
     help_text.push_str("• `look` or `l` - Look around the current room\n");
+    help_text.push_str("• `look <item>` - Examine an item in detail\n");
     help_text.push_str("• `exits` - Show available exits\n");
     help_text.push_str("• `n/s/e/w/u/d` or `north/south/east/west/up/down` - Move in a direction\n");
     help_text.push_str("• `get <item>` or `take <item>` - Pick up an item\n");

@@ -189,6 +189,7 @@ async fn handle_help(state: Arc<AppState>, command: SlashCommand) -> anyhow::Res
 
     let mut help_text = String::from("*SlackMUD Commands*\n\n");
     help_text.push_str("• `/mud look` or `/mud l` - Look around the current room\n");
+    help_text.push_str("• `/mud look <item>` - Examine an item in detail\n");
     help_text.push_str("• `/mud exits` - Show available exits\n");
     help_text.push_str("• `/mud n/s/e/w/u/d` or `/mud north/south/east/west/up/down` - Move in a direction\n");
     help_text.push_str("• `/mud get <item>` or `/mud take <item>` - Pick up an item\n");
