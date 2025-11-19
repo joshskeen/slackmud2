@@ -41,19 +41,31 @@ pub async fn handle_attach(state: Arc<AppState>, command: SlashCommand, args: &s
     if channel_arg.is_empty() {
         state.slack_client.send_dm(
             &command.user_id,
-            "Usage: `/mud attach #channel-name`\\nExample: `/mud attach #general`"
+            "Usage: `/mud attach #channel-name`\nExample: `/mud attach #general`\n\n**Important:** You must @mention the channel (type # and select from the dropdown) so Slack sends the channel ID."
         ).await?;
         return Ok(());
     }
 
     // Parse the Slack channel ID
-    let slack_channel_id = if channel_arg.starts_with('#') {
-        channel_arg.trim_start_matches('#').to_string()
-    } else if channel_arg.starts_with('<') {
-        // Handle <#C12345|name> format
-        channel_arg.trim_start_matches('<').trim_start_matches('#').split('|').next().unwrap_or(channel_arg).trim_end_matches('>').to_string()
+    let slack_channel_id = if channel_arg.starts_with('<') {
+        // Handle <#C12345|name> format (proper channel mention)
+        let parts: Vec<&str> = channel_arg.trim_start_matches('<').trim_end_matches('>').split('|').collect();
+        if let Some(id_part) = parts.first() {
+            id_part.trim_start_matches('#').to_string()
+        } else {
+            state.slack_client.send_dm(
+                &command.user_id,
+                "❌ Invalid channel format. Please @mention the channel (type # and select it from the dropdown) instead of typing the name."
+            ).await?;
+            return Ok(());
+        }
     } else {
-        channel_arg.to_string()
+        // If user typed #general or general without mentioning, show error
+        state.slack_client.send_dm(
+            &command.user_id,
+            "❌ Please @mention the channel using # (and select from dropdown) instead of typing the name.\n\nExample: Type `/mud attach ` then `#` and select the channel from the list."
+        ).await?;
+        return Ok(());
     };
 
     // Attach the room
@@ -199,18 +211,31 @@ pub async fn handle_attach_dm(
     if channel_arg.is_empty() {
         state.slack_client.send_dm(
             &user_id,
-            "Usage: `attach #channel-name`\nExample: `attach #general`"
+            "Usage: `attach #channel-name`\nExample: `attach #general`\n\n**Important:** You must @mention the channel (type # and select from the dropdown) so Slack sends the channel ID."
         ).await?;
         return Ok(());
     }
 
     // Parse the Slack channel ID
-    let slack_channel_id = if channel_arg.starts_with('#') {
-        channel_arg.trim_start_matches('#').to_string()
-    } else if channel_arg.starts_with('<') {
-        channel_arg.trim_start_matches('<').trim_start_matches('#').split('|').next().unwrap_or(channel_arg).trim_end_matches('>').to_string()
+    let slack_channel_id = if channel_arg.starts_with('<') {
+        // Handle <#C12345|name> format (proper channel mention)
+        let parts: Vec<&str> = channel_arg.trim_start_matches('<').trim_end_matches('>').split('|').collect();
+        if let Some(id_part) = parts.first() {
+            id_part.trim_start_matches('#').to_string()
+        } else {
+            state.slack_client.send_dm(
+                &user_id,
+                "❌ Invalid channel format. Please @mention the channel (type # and select it from the dropdown) instead of typing the name."
+            ).await?;
+            return Ok(());
+        }
     } else {
-        channel_arg.to_string()
+        // If user typed #general or general without mentioning, show error
+        state.slack_client.send_dm(
+            &user_id,
+            "❌ Please @mention the channel using # (and select from dropdown) instead of typing the name.\n\nExample: Type `attach ` then `#` and select the channel from the list."
+        ).await?;
+        return Ok(());
     };
 
     // Attach the room
