@@ -462,12 +462,6 @@ pub async fn handle_manifest(state: Arc<AppState>, command: SlashCommand, args: 
             let instance = crate::models::ObjectInstance::new_in_room(obj.vnum, room_id.clone());
             object_instance_repo.create(&instance).await?;
 
-            // Send success message to wizard
-            state.slack_client.send_dm(
-                &command.user_id,
-                &format!("You manifest {}.", obj.short_description)
-            ).await?;
-
             // Broadcast dramatic action to room
             let third_person = format!(
                 "_{} utters a strange incantation and performs a series of hand gestures. {} springs into existence!_",
@@ -574,12 +568,6 @@ pub async fn handle_manifest_dm(
             // Create object instance in the room
             let instance = crate::models::ObjectInstance::new_in_room(obj.vnum, room_id.clone());
             object_instance_repo.create(&instance).await?;
-
-            // Send success message to wizard
-            state.slack_client.send_dm(
-                &user_id,
-                &format!("You manifest {}.", obj.short_description)
-            ).await?;
 
             // Broadcast dramatic action to room
             let third_person = format!(
@@ -723,9 +711,10 @@ pub async fn handle_give(state: Arc<AppState>, command: SlashCommand, args: &str
     let second_person = format!("{} gives you {}.", player.name, object.short_description);
     let third_person = format!("_{} gives {} to {}._", player.name, object.short_description, target_player.name);
 
-    state.slack_client.send_dm(&command.user_id, &first_person).await?;
+    // Send to target player
     state.slack_client.send_dm(&target_player.slack_user_id, &second_person).await?;
 
+    // Broadcast to room (this handles sending first_person to the actor)
     super::broadcast_room_action(
         &state,
         &room_id,
@@ -853,9 +842,10 @@ pub async fn handle_give_dm(
     let second_person = format!("{} gives you {}.", player.name, object.short_description);
     let third_person = format!("_{} gives {} to {}._", player.name, object.short_description, target_player.name);
 
-    state.slack_client.send_dm(&user_id, &first_person).await?;
+    // Send to target player
     state.slack_client.send_dm(&target_player.slack_user_id, &second_person).await?;
 
+    // Broadcast to room (this handles sending first_person to the actor)
     super::broadcast_room_action(
         &state,
         &room_id,

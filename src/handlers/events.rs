@@ -427,7 +427,7 @@ async fn handle_help_dm(state: Arc<AppState>, user_id: String) -> anyhow::Result
         help_text.push_str("• `detach` - Detach current room from its Slack channel\n");
         help_text.push_str("• `import-area <url>` - Import MUD area file (creates virtual rooms)\n");
         help_text.push_str("• `vnums [page]` - List all imported virtual rooms\n");
-        help_text.push_str("• `listitems [page]` - List all unique item definitions\n");
+        help_text.push_str("• `listitems [search] [page]` - List/search item definitions\n");
         help_text.push_str("• `manifest <vnum|name>` - Magically create an item in the room\n");
         help_text.push_str("• `teleport <vnum>` - Teleport yourself to a room\n");
         help_text.push_str("• `teleport <player> <vnum>` - Teleport another player to a room\n");
@@ -445,6 +445,7 @@ async fn handle_socials_list_dm(state: Arc<AppState>, user_id: String) -> anyhow
 
     let mut message = String::from("*Available Social Commands:*\n\n");
     message.push_str("Use `<social>` or `<social> <player>` to perform these actions:\n\n");
+    message.push_str("```\n");
 
     // Display in columns
     let mut col = 0;
@@ -461,6 +462,7 @@ async fn handle_socials_list_dm(state: Arc<AppState>, user_id: String) -> anyhow
         message.push('\n');
     }
 
+    message.push_str("```\n");
     message.push_str(&format!("\n_Total: {} social commands available_", social_names.len()));
 
     state.slack_client.send_dm(&user_id, &message).await?;

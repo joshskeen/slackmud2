@@ -449,18 +449,34 @@ pub async fn handle_listitems(state: Arc<AppState>, command: SlashCommand, args:
         return Ok(());
     }
 
-    // Parse page number from args (default to 1)
-    let page: usize = args.trim().parse().unwrap_or(1).max(1);
+    // Parse args: search query and/or page number
+    // Examples: "bre", "bre 2", "ice breaker", "ice breaker 3", "2" (just page)
+    let (search_query, page) = parse_search_and_page(args);
+    tracing::info!("listitems: args='{}', parsed search_query={:?}, page={}", args, search_query, page);
     const PAGE_SIZE: usize = 20;
 
     // Fetch all objects
-    let objects = list_all_objects(state.clone()).await?;
+    let mut objects = list_all_objects(state.clone()).await?;
+
+    // Filter by search query if provided
+    if let Some(ref query) = search_query {
+        let query_lower = query.to_lowercase();
+        let before_count = objects.len();
+        objects.retain(|obj| {
+            // Search in keywords and short description
+            obj.keywords.to_lowercase().contains(&query_lower)
+                || obj.short_description.to_lowercase().contains(&query_lower)
+        });
+        tracing::info!("listitems: filtered from {} to {} items for query '{}'", before_count, objects.len(), query);
+    }
 
     if objects.is_empty() {
-        state.slack_client.send_dm(
-            &command.user_id,
-            "No items found. Use `/mud import-area <url>` to import an area file with objects."
-        ).await?;
+        let message = if search_query.is_some() {
+            format!("No items found matching '{}'.", search_query.unwrap())
+        } else {
+            "No items found. Use `/mud import-area <url>` to import an area file with objects.".to_string()
+        };
+        state.slack_client.send_dm(&command.user_id, &message).await?;
         return Ok(());
     }
 
@@ -479,7 +495,11 @@ pub async fn handle_listitems(state: Arc<AppState>, command: SlashCommand, args:
     }
 
     // Build the list message
-    let mut message = format!("*Items (Page {} of {})*\n", page, total_pages);
+    let mut message = if let Some(ref query) = search_query {
+        format!("*Items matching '{}'* (Page {} of {})\n", query, page, total_pages)
+    } else {
+        format!("*Items (Page {} of {})*\n", page, total_pages)
+    };
     message.push_str(&format!("_Total items: {}_\n\n", total_objects));
 
     for (idx, object) in objects.iter().enumerate().skip(start_idx).take(PAGE_SIZE) {
@@ -502,7 +522,12 @@ pub async fn handle_listitems(state: Arc<AppState>, command: SlashCommand, args:
     }
 
     if total_pages > 1 {
-        message.push_str(&format!("\n_Use `/mud listitems {}` for next page_", page + 1));
+        let next_cmd = if let Some(ref query) = search_query {
+            format!("/mud listitems {} {}", query, page + 1)
+        } else {
+            format!("/mud listitems {}", page + 1)
+        };
+        message.push_str(&format!("\n_Use `{}` for next page_", next_cmd));
     }
 
     state.slack_client.send_dm(&command.user_id, &message).await?;
@@ -529,18 +554,30 @@ pub async fn handle_listitems_dm(
         return Ok(());
     }
 
-    // Parse page number from args (default to 1)
-    let page: usize = args.trim().parse().unwrap_or(1).max(1);
+    // Parse args: search query and/or page number
+    let (search_query, page) = parse_search_and_page(args);
     const PAGE_SIZE: usize = 20;
 
     // Fetch all objects
-    let objects = list_all_objects(state.clone()).await?;
+    let mut objects = list_all_objects(state.clone()).await?;
+
+    // Filter by search query if provided
+    if let Some(ref query) = search_query {
+        let query_lower = query.to_lowercase();
+        objects.retain(|obj| {
+            // Search in keywords and short description
+            obj.keywords.to_lowercase().contains(&query_lower)
+                || obj.short_description.to_lowercase().contains(&query_lower)
+        });
+    }
 
     if objects.is_empty() {
-        state.slack_client.send_dm(
-            &user_id,
-            "No items found. Use `import-area <url>` to import an area file with objects."
-        ).await?;
+        let message = if search_query.is_some() {
+            format!("No items found matching '{}'.", search_query.unwrap())
+        } else {
+            "No items found. Use `import-area <url>` to import an area file with objects.".to_string()
+        };
+        state.slack_client.send_dm(&user_id, &message).await?;
         return Ok(());
     }
 
@@ -559,7 +596,11 @@ pub async fn handle_listitems_dm(
     }
 
     // Build the list message
-    let mut message = format!("*Items (Page {} of {})*\n", page, total_pages);
+    let mut message = if let Some(ref query) = search_query {
+        format!("*Items matching '{}'* (Page {} of {})\n", query, page, total_pages)
+    } else {
+        format!("*Items (Page {} of {})*\n", page, total_pages)
+    };
     message.push_str(&format!("_Total items: {}_\n\n", total_objects));
 
     for (idx, object) in objects.iter().enumerate().skip(start_idx).take(PAGE_SIZE) {
@@ -582,7 +623,12 @@ pub async fn handle_listitems_dm(
     }
 
     if total_pages > 1 {
-        message.push_str(&format!("\n_Use `listitems {}` for next page_", page + 1));
+        let next_cmd = if let Some(ref query) = search_query {
+            format!("listitems {} {}", query, page + 1)
+        } else {
+            format!("listitems {}", page + 1)
+        };
+        message.push_str(&format!("\n_Use `{}` for next page_", next_cmd));
     }
 
     state.slack_client.send_dm(&user_id, &message).await?;
@@ -598,4 +644,41 @@ async fn list_all_objects(state: Arc<AppState>) -> Result<Vec<crate::models::Obj
     .await?;
 
     Ok(objects)
+}
+
+/// Parse args to extract search query and page number
+/// Examples:
+///   "" -> (None, 1)
+///   "2" -> (None, 2)
+///   "bre" -> (Some("bre"), 1)
+///   "bre 2" -> (Some("bre"), 2)
+///   "ice breaker" -> (Some("ice breaker"), 1)
+///   "ice breaker 3" -> (Some("ice breaker"), 3)
+fn parse_search_and_page(args: &str) -> (Option<String>, usize) {
+    let args = args.trim();
+
+    if args.is_empty() {
+        return (None, 1);
+    }
+
+    let words: Vec<&str> = args.split_whitespace().collect();
+
+    if words.is_empty() {
+        return (None, 1);
+    }
+
+    // Check if last word is a number
+    if let Ok(page_num) = words.last().unwrap().parse::<usize>() {
+        if words.len() == 1 {
+            // Just a page number, no search query
+            (None, page_num.max(1))
+        } else {
+            // Search query followed by page number
+            let search = words[..words.len() - 1].join(" ");
+            (Some(search), page_num.max(1))
+        }
+    } else {
+        // No page number at the end, entire args is search query
+        (Some(args.to_string()), 1)
+    }
 }

@@ -49,12 +49,7 @@ pub async fn handle_social(
         let actor_msg = social_cmd.messages.get_actor_message(&actor, None);
         let room_msg = social_cmd.messages.get_room_message(&actor, None);
 
-        // Send message to actor
-        if !actor_msg.is_empty() {
-            state.slack_client.send_dm(&command.user_id, &actor_msg).await?;
-        }
-
-        // Broadcast to room
+        // Broadcast to room (this handles sending the actor_msg to the actor)
         if !room_msg.is_empty() {
             super::broadcast_room_action(
                 &state,
@@ -74,17 +69,12 @@ pub async fn handle_social(
                 let target_msg = social_cmd.messages.get_target_message(&actor, &target_player);
                 let room_msg = social_cmd.messages.get_room_message(&actor, Some(&target_player));
 
-                // Send message to actor
-                if !actor_msg.is_empty() {
-                    state.slack_client.send_dm(&command.user_id, &actor_msg).await?;
-                }
-
                 // Send message to target (if not targeting self)
                 if target_player.slack_user_id != actor.slack_user_id && !target_msg.is_empty() {
                     state.slack_client.send_dm(&target_player.slack_user_id, &target_msg).await?;
                 }
 
-                // Broadcast to room
+                // Broadcast to room (this handles sending the actor_msg to the actor)
                 if !room_msg.is_empty() {
                     super::broadcast_room_action(
                         &state,
@@ -158,12 +148,7 @@ pub async fn handle_social_dm(
         let actor_msg = social_cmd.messages.get_actor_message(&actor, None);
         let room_msg = social_cmd.messages.get_room_message(&actor, None);
 
-        // Send message to actor
-        if !actor_msg.is_empty() {
-            state.slack_client.send_dm(&user_id, &actor_msg).await?;
-        }
-
-        // Broadcast to room
+        // Broadcast to room (this handles sending the actor_msg to the actor)
         if !room_msg.is_empty() {
             super::broadcast_room_action(
                 &state,
@@ -183,17 +168,12 @@ pub async fn handle_social_dm(
                 let target_msg = social_cmd.messages.get_target_message(&actor, &target_player);
                 let room_msg = social_cmd.messages.get_room_message(&actor, Some(&target_player));
 
-                // Send message to actor
-                if !actor_msg.is_empty() {
-                    state.slack_client.send_dm(&user_id, &actor_msg).await?;
-                }
-
                 // Send message to target (if not targeting self)
                 if target_player.slack_user_id != actor.slack_user_id && !target_msg.is_empty() {
                     state.slack_client.send_dm(&target_player.slack_user_id, &target_msg).await?;
                 }
 
-                // Broadcast to room
+                // Broadcast to room (this handles sending the actor_msg to the actor)
                 if !room_msg.is_empty() {
                     super::broadcast_room_action(
                         &state,
