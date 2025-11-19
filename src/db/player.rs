@@ -103,4 +103,11 @@ impl PlayerRepository {
 
         Ok(result.map(|(exists,)| exists).unwrap_or(false))
     }
+
+    pub async fn delete_all(&self) -> Result<(), sqlx::Error> {
+        sqlx::query("DELETE FROM players")
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
 }

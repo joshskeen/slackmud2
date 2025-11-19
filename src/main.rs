@@ -88,6 +88,16 @@ async fn main() -> Result<()> {
     db::run_migrations(&db_pool).await
         .context("Failed to run migrations")?;
 
+    // Force recreate players if enabled (development option)
+    if std::env::var("FORCE_RECREATE_PLAYERS").unwrap_or_default() == "true" {
+        tracing::warn!("FORCE_RECREATE_PLAYERS enabled - deleting all players");
+        use db::player::PlayerRepository;
+        let player_repo = PlayerRepository::new(db_pool.clone());
+        player_repo.delete_all().await
+            .context("Failed to delete players")?;
+        tracing::info!("All players deleted");
+    }
+
     // Load and promote wizards
     tracing::info!("Loading wizards");
     load_wizards(&db_pool).await?;

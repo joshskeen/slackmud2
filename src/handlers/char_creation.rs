@@ -9,6 +9,19 @@ use anyhow::Result;
 
 const TOWN_SQUARE_VNUM: &str = "vnum_3001"; // Midgaard town square
 
+/// Check if a user ID is in the wizards list
+fn is_wizard(user_id: &str) -> bool {
+    // Check environment variable for wizards list
+    if let Ok(wizards_env) = std::env::var("WIZARDS") {
+        for id in wizards_env.split(',') {
+            if id.trim() == user_id {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Start the character creation process for a new player
 pub async fn start_character_creation(state: Arc<AppState>, user_id: &str) -> Result<()> {
     // Initialize character creation state
@@ -250,6 +263,12 @@ async fn handle_class_input(
             player.class_id = char_state.class_id;
             player.current_channel_id = Some(TOWN_SQUARE_VNUM.to_string());
 
+            // Check if this user is a wizard
+            let is_wizard_user = is_wizard(user_id);
+            if is_wizard_user {
+                player.level = 50;
+            }
+
             player_repo.create(&player).await?;
 
             // Remove from character creation state
@@ -259,32 +278,50 @@ async fn handle_class_input(
             }
 
             // Broadcast arrival to the room
-            let arrival_msg = format!("_{} fades into existence!_", player.name);
+            let (arrival_msg, first_person_msg) = if is_wizard_user {
+                // Wizard arrival - use god/goddess based on gender
+                let deity_title = match char_state.gender.as_deref() {
+                    Some("male") => "god",
+                    Some("female") => "goddess",
+                    _ => "deity",
+                };
+                (
+                    format!("_The {} {} materializes!_", deity_title, player.name),
+                    format!("_You materialize as a {} in the town square._", deity_title),
+                )
+            } else {
+                // Normal player arrival
+                (
+                    format!("_{} fades into existence!_", player.name),
+                    "_You fade into existence in the town square._".to_string(),
+                )
+            };
+
             let _ = crate::handlers::broadcast_room_action(
                 &state,
                 TOWN_SQUARE_VNUM,
                 &arrival_msg,
                 Some(user_id),
-                Some("_You fade into existence in the town square._"),
+                Some(&first_person_msg),
             ).await;
 
             // Send completion message
-            let completion_msg = format!(
+            let mut completion_msg = format!(
                 r#"*Character Created!*
 
 Name: *{}*
 Gender: *{}*
 Race: *{}*
-Class: *{}*
-
-You awaken in the town square of Midgaard. Your adventure begins now!
-
-Type `/mud look` to see your surroundings, or `/mud help` for a list of commands."#,
+Class: *{}*{}"#,
                 player.name,
                 char_state.gender.as_ref().unwrap(),
                 classes.iter().find(|c| Some(c.id) == char_state.race_id).map(|c| c.name.as_str()).unwrap_or("Unknown"),
-                class.name
+                class.name,
+                if is_wizard_user { "\nLevel: *50 (Wizard)*" } else { "" }
             );
+
+            completion_msg.push_str("\n\nYou awaken in the town square of Midgaard. Your adventure begins now!\n\n");
+            completion_msg.push_str("Type `/mud look` to see your surroundings, or `/mud help` for a list of commands.");
 
             state.slack_client.send_dm(user_id, &completion_msg).await?;
         }
