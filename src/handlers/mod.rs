@@ -9,6 +9,7 @@ mod teleport;
 mod item;
 mod equipment;
 mod social;
+mod char_creation;
 
 pub use events::handle_events;
 
@@ -92,6 +93,36 @@ pub async fn handle_slash_command(
         command.user_id,
         command.channel_id
     );
+
+    // Check if player exists and is complete
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+    let player = player_repo.get_by_slack_id(&command.user_id).await;
+
+    match player {
+        Ok(Some(player)) => {
+            // Player exists - check if character creation is complete
+            if !player.is_character_complete() {
+                let error_msg = "Your character is incomplete. Please complete character creation by typing `/mud character`.";
+                let _ = state.slack_client.send_dm(&command.user_id, error_msg).await;
+                return StatusCode::OK.into_response();
+            }
+            // Character complete - proceed with command
+        }
+        Ok(None) => {
+            // New player - start character creation
+            match char_creation::start_character_creation(state.clone(), &command.user_id).await {
+                Ok(_) => return StatusCode::OK.into_response(),
+                Err(e) => {
+                    tracing::error!("Error starting character creation: {}", e);
+                    return (StatusCode::INTERNAL_SERVER_ERROR, format!("Error: {}", e)).into_response();
+                }
+            }
+        }
+        Err(e) => {
+            tracing::error!("Error checking player: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, format!("Error: {}", e)).into_response();
+        }
+    }
 
     let (subcommand, args) = command.parse_subcommand();
 

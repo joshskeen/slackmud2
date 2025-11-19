@@ -80,6 +80,52 @@ async fn handle_message_event(
         msg_event.text
     );
 
+    // Check if user is in character creation
+    if super::char_creation::is_in_character_creation(&state, &user_id) {
+        match super::char_creation::handle_character_creation_input(
+            state.clone(),
+            &user_id,
+            &msg_event.text,
+        ).await {
+            Ok(_) => return StatusCode::OK.into_response(),
+            Err(e) => {
+                tracing::error!("Error in character creation: {}", e);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        }
+    }
+
+    // Check if player exists
+    use crate::db::player::PlayerRepository;
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+    let player = player_repo.get_by_slack_id(&user_id).await;
+
+    match player {
+        Ok(Some(player)) => {
+            // Player exists - check if character creation is complete
+            if !player.is_character_complete() {
+                let error_msg = "Your character is incomplete. Please complete character creation by typing `/mud character`.";
+                let _ = state.slack_client.send_dm(&user_id, error_msg).await;
+                return StatusCode::OK.into_response();
+            }
+            // Character complete - proceed with command
+        }
+        Ok(None) => {
+            // New player - start character creation
+            match super::char_creation::start_character_creation(state.clone(), &user_id).await {
+                Ok(_) => return StatusCode::OK.into_response(),
+                Err(e) => {
+                    tracing::error!("Error starting character creation: {}", e);
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            }
+        }
+        Err(e) => {
+            tracing::error!("Error checking player: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    }
+
     // Parse the command from the message
     let (command, _args) = msg_event.parse_command();
 

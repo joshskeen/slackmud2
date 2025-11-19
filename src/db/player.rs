@@ -92,4 +92,15 @@ impl PlayerRepository {
         .fetch_all(&self.pool)
         .await
     }
+
+    pub async fn is_name_taken(&self, name: &str) -> Result<bool, sqlx::Error> {
+        let result: Option<(bool,)> = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM players WHERE LOWER(name) = LOWER($1))"
+        )
+        .bind(name)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result.map(|(exists,)| exists).unwrap_or(false))
+    }
 }

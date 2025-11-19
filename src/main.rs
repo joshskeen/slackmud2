@@ -13,14 +13,44 @@ use axum::{
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::collections::VecDeque;
+use std::collections::{VecDeque, HashMap};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+#[derive(Debug, Clone)]
+pub enum CharCreationStep {
+    Name,
+    Gender,
+    Race,
+    Class,
+}
+
+#[derive(Debug, Clone)]
+pub struct CharCreationState {
+    pub step: CharCreationStep,
+    pub name: Option<String>,
+    pub gender: Option<String>,
+    pub race_id: Option<i32>,
+    pub class_id: Option<i32>,
+}
+
+impl CharCreationState {
+    pub fn new() -> Self {
+        Self {
+            step: CharCreationStep::Name,
+            name: None,
+            gender: None,
+            race_id: None,
+            class_id: None,
+        }
+    }
+}
 
 pub struct AppState {
     pub db_pool: PgPool,
     pub slack_client: slack::SlackClient,
     pub recent_event_ids: Mutex<VecDeque<String>>,
+    pub char_creation_states: Mutex<HashMap<String, CharCreationState>>,
 }
 
 #[tokio::main]
@@ -74,6 +104,7 @@ async fn main() -> Result<()> {
         db_pool,
         slack_client,
         recent_event_ids: Mutex::new(VecDeque::with_capacity(1000)),
+        char_creation_states: Mutex::new(HashMap::new()),
     });
 
     // Build router
