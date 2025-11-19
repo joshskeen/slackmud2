@@ -37,19 +37,27 @@ pub fn parse_socials(content: &str) -> Result<HashMap<String, Social>> {
         let command_name = parts[0].to_lowercase();
         i += 1;
 
-        // Now read the 8 message lines
+        // Now read up to 8 message lines (some socials end early with # terminator)
         let mut messages: Vec<String> = Vec::new();
         for _ in 0..8 {
             if i >= lines.len() {
-                bail!("Unexpected end of file while parsing social: {}", command_name);
+                // End of file - fill remaining with empty strings
+                break;
             }
 
-            let msg_line = lines[i];
+            let msg_line = lines[i].trim();
+
+            // Check for early terminator
+            if msg_line == "#" {
+                i += 1; // Skip the # terminator
+                break;
+            }
+
             // Handle empty messages (marked with $ or empty line)
-            let message = if msg_line.trim() == "$" || msg_line.trim().is_empty() {
+            let message = if msg_line == "$" || msg_line.is_empty() {
                 String::new()
             } else {
-                msg_line.to_string()
+                lines[i].to_string()
             };
             messages.push(message);
             i += 1;
