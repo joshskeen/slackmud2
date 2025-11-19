@@ -117,6 +117,7 @@ pub async fn handle_slash_command(
         "get" | "take" => item::handle_get(state, command.clone(), args).await,
         "drop" => item::handle_drop(state, command.clone(), args).await,
         "inventory" | "inv" | "i" => item::handle_inventory(state, command).await,
+        "manifest" => item::handle_manifest(state, command.clone(), args).await,
         // Equipment commands
         "wear" => equipment::handle_wear(state, command.clone(), args).await,
         "wield" => equipment::handle_wield(state, command.clone(), args).await,
@@ -216,6 +217,7 @@ async fn handle_help(state: Arc<AppState>, command: SlashCommand) -> anyhow::Res
         help_text.push_str("• `/mud import-area <url>` - Import MUD area file (creates virtual rooms)\n");
         help_text.push_str("• `/mud vnums [page]` - List all imported virtual rooms\n");
         help_text.push_str("• `/mud listitems [page]` - List all unique item definitions\n");
+        help_text.push_str("• `/mud manifest <vnum|name>` - Magically create an item in the room\n");
         help_text.push_str("• `/mud teleport <vnum>` - Teleport yourself to a room\n");
         help_text.push_str("• `/mud teleport <player> <vnum>` - Teleport another player to a room\n");
     }

@@ -10,6 +10,10 @@ impl ObjectRepository {
         Self { pool }
     }
 
+    pub fn pool(&self) -> &PgPool {
+        &self.pool
+    }
+
     /// Create a new object definition
     pub async fn create(&self, object: &Object) -> Result<(), sqlx::Error> {
         sqlx::query(
