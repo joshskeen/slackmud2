@@ -8,6 +8,7 @@ mod import;
 mod teleport;
 mod item;
 mod equipment;
+mod social;
 
 pub use events::handle_events;
 
@@ -123,9 +124,15 @@ pub async fn handle_slash_command(
         "wield" => equipment::handle_wield(state, command.clone(), args).await,
         "remove" | "rem" => equipment::handle_remove(state, command.clone(), args).await,
         "equipment" | "eq" => equipment::handle_equipment(state, command).await,
+        "socials" => handle_socials_list(state, command).await,
         "" | "help" => handle_help(state, command).await,
         _ => {
-            Err(anyhow::anyhow!("Unknown command: `{}`. Type `/mud help` for available commands.", subcommand))
+            // Check if it's a social command
+            if crate::social::get_social(subcommand).is_some() {
+                social::handle_social(state, command.clone(), subcommand, args).await
+            } else {
+                Err(anyhow::anyhow!("Unknown command: `{}`. Type `/mud help` for available commands.", subcommand))
+            }
         }
     };
 
@@ -208,6 +215,8 @@ async fn handle_help(state: Arc<AppState>, command: SlashCommand) -> anyhow::Res
     help_text.push_str("• `/mud remove <item>` - Remove equipped item\n");
     help_text.push_str("• `/mud equipment` or `/mud eq` - Show your equipment\n");
     help_text.push_str("• `/mud character` or `/mud char` - Customize your character (class, race, gender)\n");
+    help_text.push_str("• `/mud socials` - List all available social commands\n");
+    help_text.push_str("• `/mud <social> [player]` - Perform a social action (e.g., `/mud smile` or `/mud hug bob`)\n");
 
     if is_wizard {
         help_text.push_str("\n*Wizard Commands:*\n");
@@ -226,5 +235,32 @@ async fn handle_help(state: Arc<AppState>, command: SlashCommand) -> anyhow::Res
     help_text.push_str("\nYou can also DM me directly with commands (without `/mud`)!");
 
     state.slack_client.send_dm(&command.user_id, &help_text).await?;
+    Ok(())
+}
+
+async fn handle_socials_list(state: Arc<AppState>, command: SlashCommand) -> anyhow::Result<()> {
+    let social_names = crate::social::get_all_social_names();
+
+    let mut message = String::from("*Available Social Commands:*\n\n");
+    message.push_str("Use `/mud <social>` or `/mud <social> <player>` to perform these actions:\n\n");
+
+    // Display in columns
+    let mut col = 0;
+    for name in &social_names {
+        message.push_str(&format!("{:<15}", name));
+        col += 1;
+        if col >= 4 {
+            message.push('\n');
+            col = 0;
+        }
+    }
+
+    if col > 0 {
+        message.push('\n');
+    }
+
+    message.push_str(&format!("\n_Total: {} social commands available_", social_names.len()));
+
+    state.slack_client.send_dm(&command.user_id, &message).await?;
     Ok(())
 }

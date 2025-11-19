@@ -3,6 +3,7 @@ mod db;
 mod slack;
 mod handlers;
 mod area;
+mod social;
 
 use anyhow::{Context, Result};
 use axum::{
