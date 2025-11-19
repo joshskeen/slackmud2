@@ -42,17 +42,34 @@ pub async fn broadcast_room_action(
     let room_repo = RoomRepository::new(state.db_pool.clone());
     if let Some(room) = room_repo.get_by_channel_id(room_channel_id).await? {
         if let Some(attached_channel) = room.attached_channel_id {
+            tracing::info!(
+                "Broadcasting to attached channel: room='{}' ({}), attached_channel='{}', message_preview='{}'",
+                room.channel_name,
+                room_channel_id,
+                attached_channel,
+                message.chars().take(50).collect::<String>()
+            );
             // Post to the attached Slack channel with a subtle bot appearance
             // Always use third-person message in the channel
-            let _ = state.slack_client.post_message_with_username(
+            match state.slack_client.post_message_with_username(
                 &attached_channel,
                 message,
                 None,
                 Some("mud".to_string()),
                 Some(":game_die:".to_string()),
-            ).await;
-            // Ignore post errors to avoid failing the whole broadcast
+            ).await {
+                Ok(_) => {
+                    tracing::info!("Successfully posted message to attached channel '{}'", attached_channel);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to post message to attached channel '{}': {}", attached_channel, e);
+                }
+            }
+        } else {
+            tracing::debug!("Room '{}' ({}) is not attached to any Slack channel", room.channel_name, room_channel_id);
         }
+    } else {
+        tracing::warn!("Room '{}' not found when broadcasting", room_channel_id);
     }
 
     // 2. Send DM to all players whose current room is this room

@@ -58,6 +58,11 @@ pub async fn handle_attach(state: Arc<AppState>, command: SlashCommand, args: &s
 
     // Attach the room
     room_repo.attach_to_channel(&current_room_id, &slack_channel_id).await?;
+    tracing::info!(
+        "Attached room '{}' to Slack channel '{}'",
+        current_room_id,
+        slack_channel_id
+    );
 
     // Get room info for confirmation
     let room = room_repo.get_by_channel_id(&current_room_id).await?;
@@ -71,13 +76,21 @@ pub async fn handle_attach(state: Arc<AppState>, command: SlashCommand, args: &s
         room_description.lines().next().unwrap_or("A mysterious presence fills the air.")
     );
 
-    let _ = state.slack_client.post_message_with_username(
+    tracing::info!("Posting attach announcement to channel '{}'", slack_channel_id);
+    match state.slack_client.post_message_with_username(
         &slack_channel_id,
         &dramatic_message,
         None,
         Some("The Weave".to_string()),
         Some(":crystal_ball:".to_string()),
-    ).await;
+    ).await {
+        Ok(_) => {
+            tracing::info!("Successfully posted attach announcement to channel '{}'", slack_channel_id);
+        }
+        Err(e) => {
+            tracing::error!("Failed to post attach announcement to channel '{}': {}", slack_channel_id, e);
+        }
+    }
 
     state.slack_client.send_dm(
         &command.user_id,
@@ -202,6 +215,11 @@ pub async fn handle_attach_dm(
 
     // Attach the room
     room_repo.attach_to_channel(&current_room_id, &slack_channel_id).await?;
+    tracing::info!(
+        "Attached room '{}' to Slack channel '{}'",
+        current_room_id,
+        slack_channel_id
+    );
 
     // Get room info for confirmation
     let room = room_repo.get_by_channel_id(&current_room_id).await?;
@@ -215,13 +233,21 @@ pub async fn handle_attach_dm(
         room_description.lines().next().unwrap_or("A mysterious presence fills the air.")
     );
 
-    let _ = state.slack_client.post_message_with_username(
+    tracing::info!("Posting attach announcement to channel '{}'", slack_channel_id);
+    match state.slack_client.post_message_with_username(
         &slack_channel_id,
         &dramatic_message,
         None,
         Some("The Weave".to_string()),
         Some(":crystal_ball:".to_string()),
-    ).await;
+    ).await {
+        Ok(_) => {
+            tracing::info!("Successfully posted attach announcement to channel '{}'", slack_channel_id);
+        }
+        Err(e) => {
+            tracing::error!("Failed to post attach announcement to channel '{}': {}", slack_channel_id, e);
+        }
+    }
 
     state.slack_client.send_dm(
         &user_id,
