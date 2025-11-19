@@ -286,6 +286,14 @@ async fn handle_message_event(
                 _args,
             ).await
         }
+        "give" => {
+            super::item::handle_give_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                _args,
+            ).await
+        }
         "inventory" | "inv" | "i" => {
             super::item::handle_inventory_dm(
                 state.clone(),
@@ -406,6 +414,7 @@ async fn handle_help_dm(state: Arc<AppState>, user_id: String) -> anyhow::Result
     help_text.push_str("• `n/s/e/w/u/d` or `north/south/east/west/up/down` - Move in a direction\n");
     help_text.push_str("• `get <item>` or `take <item>` - Pick up an item\n");
     help_text.push_str("• `drop <item>` - Drop an item\n");
+    help_text.push_str("• `give <item> <player>` - Give an item to another player\n");
     help_text.push_str("• `inventory` or `i` - Show what you're carrying\n");
     help_text.push_str("• `character` or `c` - View your character info\n");
     help_text.push_str("• `socials` - List all available social commands\n");

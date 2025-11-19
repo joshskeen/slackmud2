@@ -159,6 +159,17 @@ impl ObjectInstanceRepository {
         .await
     }
 
+    /// Get all objects owned by a player (both inventory and equipped)
+    pub async fn get_by_owner(&self, player_slack_id: &str) -> Result<Vec<ObjectInstance>, sqlx::Error> {
+        sqlx::query_as::<_, ObjectInstance>(
+            "SELECT * FROM object_instances
+             WHERE location_id = $1 AND location_type IN ('player', 'equipped')"
+        )
+        .bind(player_slack_id)
+        .fetch_all(&self.pool)
+        .await
+    }
+
     /// Update object instance location
     pub async fn update_location(
         &self,
@@ -252,5 +263,25 @@ impl ObjectInstanceRepository {
         .bind(equipped_slot)
         .fetch_optional(&self.pool)
         .await
+    }
+
+    /// Transfer an object instance to another player
+    pub async fn transfer_to_player(
+        &self,
+        instance_id: i32,
+        target_player_id: &str,
+    ) -> Result<(), sqlx::Error> {
+        let now = chrono::Utc::now().timestamp();
+        sqlx::query(
+            "UPDATE object_instances
+             SET location_type = 'player', location_id = $1, equipped_slot = NULL, updated_at = $2
+             WHERE id = $3"
+        )
+        .bind(target_player_id)
+        .bind(now)
+        .bind(instance_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 }

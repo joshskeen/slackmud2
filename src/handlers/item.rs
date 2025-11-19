@@ -609,3 +609,279 @@ pub async fn handle_manifest_dm(
 
     Ok(())
 }
+
+pub async fn handle_give(state: Arc<AppState>, command: SlashCommand, args: &str) -> Result<()> {
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+    let object_repo = ObjectRepository::new(state.db_pool.clone());
+    let object_instance_repo = ObjectInstanceRepository::new(state.db_pool.clone());
+
+    // Get player
+    let real_name = state.slack_client.get_user_real_name(&command.user_id).await?;
+    let player = player_repo.get_or_create(command.user_id.clone(), real_name).await?;
+
+    // Check if player has a current room
+    let room_id = match &player.current_channel_id {
+        Some(id) => id.clone(),
+        None => {
+            state.slack_client.send_dm(
+                &command.user_id,
+                "You need to be in a room first!"
+            ).await?;
+            return Ok(());
+        }
+    };
+
+    // Parse args: "give <item> <player>" or "give <item> to <player>"
+    let args = args.trim();
+    if args.is_empty() {
+        state.slack_client.send_dm(
+            &command.user_id,
+            "Usage: `/mud give <item> <player>`\nExample: `/mud give sword bob`"
+        ).await?;
+        return Ok(());
+    }
+
+    // Split on "to" if present, otherwise split on whitespace
+    let (item_name, target_name) = if let Some(to_pos) = args.find(" to ") {
+        let (item, target) = args.split_at(to_pos);
+        (item.trim(), target[4..].trim()) // Skip " to "
+    } else {
+        // Split on last whitespace to get item and target
+        if let Some(last_space) = args.rfind(' ') {
+            let (item, target) = args.split_at(last_space);
+            (item.trim(), target.trim())
+        } else {
+            state.slack_client.send_dm(
+                &command.user_id,
+                "Usage: `/mud give <item> <player>`\nExample: `/mud give sword bob`"
+            ).await?;
+            return Ok(());
+        }
+    };
+
+    if item_name.is_empty() || target_name.is_empty() {
+        state.slack_client.send_dm(
+            &command.user_id,
+            "Usage: `/mud give <item> <player>`\nExample: `/mud give sword bob`"
+        ).await?;
+        return Ok(());
+    }
+
+    // Find the item in player's inventory or equipped
+    let instances = object_instance_repo.get_by_owner(&player.slack_user_id).await?;
+
+    let mut item_to_give = None;
+    for instance in instances {
+        let object = object_repo.get_by_vnum(instance.object_vnum).await?;
+        if let Some(obj) = object {
+            if obj.matches_keyword(item_name) {
+                item_to_give = Some((instance, obj));
+                break;
+            }
+        }
+    }
+
+    let (instance, object) = match item_to_give {
+        Some(pair) => pair,
+        None => {
+            state.slack_client.send_dm(
+                &command.user_id,
+                "That's not yours to give!"
+            ).await?;
+            return Ok(());
+        }
+    };
+
+    // Find target player in same room
+    let target = find_player_in_room(&state, &room_id, target_name).await?;
+
+    let target_player = match target {
+        Some(p) => p,
+        None => {
+            state.slack_client.send_dm(
+                &command.user_id,
+                &format!("You don't see '{}' here.", target_name)
+            ).await?;
+            return Ok(());
+        }
+    };
+
+    // Can't give to yourself
+    if target_player.slack_user_id == player.slack_user_id {
+        state.slack_client.send_dm(
+            &command.user_id,
+            "You can't give items to yourself!"
+        ).await?;
+        return Ok(());
+    }
+
+    // Transfer the item
+    object_instance_repo.transfer_to_player(instance.id, &target_player.slack_user_id).await?;
+
+    // Send messages
+    let first_person = format!("You give {} to {}.", object.short_description, target_player.name);
+    let second_person = format!("{} gives you {}.", player.name, object.short_description);
+    let third_person = format!("_{} gives {} to {}._", player.name, object.short_description, target_player.name);
+
+    state.slack_client.send_dm(&command.user_id, &first_person).await?;
+    state.slack_client.send_dm(&target_player.slack_user_id, &second_person).await?;
+
+    super::broadcast_room_action(
+        &state,
+        &room_id,
+        &third_person,
+        Some(&command.user_id),
+        Some(&first_person),
+    ).await?;
+
+    Ok(())
+}
+
+pub async fn handle_give_dm(
+    state: Arc<AppState>,
+    user_id: String,
+    user_name: String,
+    args: &str,
+) -> Result<()> {
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+    let object_repo = ObjectRepository::new(state.db_pool.clone());
+    let object_instance_repo = ObjectInstanceRepository::new(state.db_pool.clone());
+
+    // Get player
+    let player = player_repo.get_or_create(user_id.clone(), user_name).await?;
+
+    // Check if player has a current room
+    let room_id = match &player.current_channel_id {
+        Some(id) => id.clone(),
+        None => {
+            state.slack_client.send_dm(
+                &user_id,
+                "You need to be in a room first!"
+            ).await?;
+            return Ok(());
+        }
+    };
+
+    // Parse args
+    let args = args.trim();
+    if args.is_empty() {
+        state.slack_client.send_dm(
+            &user_id,
+            "Usage: `give <item> <player>`\nExample: `give sword bob`"
+        ).await?;
+        return Ok(());
+    }
+
+    // Split on "to" if present, otherwise split on whitespace
+    let (item_name, target_name) = if let Some(to_pos) = args.find(" to ") {
+        let (item, target) = args.split_at(to_pos);
+        (item.trim(), target[4..].trim())
+    } else {
+        if let Some(last_space) = args.rfind(' ') {
+            let (item, target) = args.split_at(last_space);
+            (item.trim(), target.trim())
+        } else {
+            state.slack_client.send_dm(
+                &user_id,
+                "Usage: `give <item> <player>`\nExample: `give sword bob`"
+            ).await?;
+            return Ok(());
+        }
+    };
+
+    if item_name.is_empty() || target_name.is_empty() {
+        state.slack_client.send_dm(
+            &user_id,
+            "Usage: `give <item> <player>`\nExample: `give sword bob`"
+        ).await?;
+        return Ok(());
+    }
+
+    // Find the item in player's inventory or equipped
+    let instances = object_instance_repo.get_by_owner(&player.slack_user_id).await?;
+
+    let mut item_to_give = None;
+    for instance in instances {
+        let object = object_repo.get_by_vnum(instance.object_vnum).await?;
+        if let Some(obj) = object {
+            if obj.matches_keyword(item_name) {
+                item_to_give = Some((instance, obj));
+                break;
+            }
+        }
+    }
+
+    let (instance, object) = match item_to_give {
+        Some(pair) => pair,
+        None => {
+            state.slack_client.send_dm(
+                &user_id,
+                "That's not yours to give!"
+            ).await?;
+            return Ok(());
+        }
+    };
+
+    // Find target player in same room
+    let target = find_player_in_room(&state, &room_id, target_name).await?;
+
+    let target_player = match target {
+        Some(p) => p,
+        None => {
+            state.slack_client.send_dm(
+                &user_id,
+                &format!("You don't see '{}' here.", target_name)
+            ).await?;
+            return Ok(());
+        }
+    };
+
+    // Can't give to yourself
+    if target_player.slack_user_id == player.slack_user_id {
+        state.slack_client.send_dm(
+            &user_id,
+            "You can't give items to yourself!"
+        ).await?;
+        return Ok(());
+    }
+
+    // Transfer the item
+    object_instance_repo.transfer_to_player(instance.id, &target_player.slack_user_id).await?;
+
+    // Send messages
+    let first_person = format!("You give {} to {}.", object.short_description, target_player.name);
+    let second_person = format!("{} gives you {}.", player.name, object.short_description);
+    let third_person = format!("_{} gives {} to {}._", player.name, object.short_description, target_player.name);
+
+    state.slack_client.send_dm(&user_id, &first_person).await?;
+    state.slack_client.send_dm(&target_player.slack_user_id, &second_person).await?;
+
+    super::broadcast_room_action(
+        &state,
+        &room_id,
+        &third_person,
+        Some(&user_id),
+        Some(&first_person),
+    ).await?;
+
+    Ok(())
+}
+
+/// Find a player in the same room by name (case-insensitive)
+async fn find_player_in_room(
+    state: &Arc<AppState>,
+    room_id: &str,
+    target_name: &str,
+) -> Result<Option<crate::models::Player>> {
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+    let players = player_repo.get_players_in_room(room_id).await?;
+
+    let target_lower = target_name.to_lowercase();
+    for player in players {
+        if player.name.to_lowercase() == target_lower {
+            return Ok(Some(player));
+        }
+    }
+
+    Ok(None)
+}

@@ -165,6 +165,7 @@ pub async fn handle_slash_command(
         // Item commands
         "get" | "take" => item::handle_get(state, command.clone(), args).await,
         "drop" => item::handle_drop(state, command.clone(), args).await,
+        "give" => item::handle_give(state, command.clone(), args).await,
         "inventory" | "inv" | "i" => item::handle_inventory(state, command).await,
         "manifest" => item::handle_manifest(state, command.clone(), args).await,
         // Equipment commands
@@ -257,6 +258,7 @@ async fn handle_help(state: Arc<AppState>, command: SlashCommand) -> anyhow::Res
     help_text.push_str("• `/mud n/s/e/w/u/d` or `/mud north/south/east/west/up/down` - Move in a direction\n");
     help_text.push_str("• `/mud get <item>` or `/mud take <item>` - Pick up an item\n");
     help_text.push_str("• `/mud drop <item>` - Drop an item\n");
+    help_text.push_str("• `/mud give <item> <player>` - Give an item to another player\n");
     help_text.push_str("• `/mud inventory` or `/mud i` - Show what you're carrying\n");
     help_text.push_str("• `/mud wear <item>` - Wear armor or clothing\n");
     help_text.push_str("• `/mud wield <weapon>` - Wield a weapon\n");
