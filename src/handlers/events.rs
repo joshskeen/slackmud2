@@ -309,6 +309,31 @@ async fn handle_message_event(
                 _args,
             ).await
         }
+        // Communication commands
+        "say" => {
+            super::communication::handle_say_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                _args,
+            ).await
+        }
+        "tell" => {
+            super::communication::handle_tell_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                _args,
+            ).await
+        }
+        "shout" => {
+            super::communication::handle_shout_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                _args,
+            ).await
+        }
         "help" | "h" => {
             handle_help_dm(state.clone(), user_id.clone()).await
         }
@@ -417,6 +442,9 @@ async fn handle_help_dm(state: Arc<AppState>, user_id: String) -> anyhow::Result
     help_text.push_str("• `give <item> <player>` - Give an item to another player\n");
     help_text.push_str("• `inventory` or `i` - Show what you're carrying\n");
     help_text.push_str("• `character` or `c` - View your character info\n");
+    help_text.push_str("• `say <message>` - Say something to everyone in the room\n");
+    help_text.push_str("• `tell <player> <message>` - Send a private message to another player\n");
+    help_text.push_str("• `shout <message>` - Shout a message to all players\n");
     help_text.push_str("• `socials` - List all available social commands\n");
     help_text.push_str("• `<social> [player]` - Perform a social action (e.g., `smile` or `hug bob`)\n");
 

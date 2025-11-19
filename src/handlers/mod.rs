@@ -10,6 +10,7 @@ mod item;
 mod equipment;
 mod social;
 mod char_creation;
+mod communication;
 
 pub use events::handle_events;
 
@@ -173,6 +174,10 @@ pub async fn handle_slash_command(
         "wield" => equipment::handle_wield(state, command.clone(), args).await,
         "remove" | "rem" => equipment::handle_remove(state, command.clone(), args).await,
         "equipment" | "eq" => equipment::handle_equipment(state, command).await,
+        // Communication commands
+        "say" => communication::handle_say(state, command.clone(), args).await,
+        "tell" => communication::handle_tell(state, command.clone(), args).await,
+        "shout" => communication::handle_shout(state, command.clone(), args).await,
         "socials" => handle_socials_list(state, command).await,
         "" | "help" => handle_help(state, command).await,
         _ => {
@@ -265,6 +270,9 @@ async fn handle_help(state: Arc<AppState>, command: SlashCommand) -> anyhow::Res
     help_text.push_str("• `/mud remove <item>` - Remove equipped item\n");
     help_text.push_str("• `/mud equipment` or `/mud eq` - Show your equipment\n");
     help_text.push_str("• `/mud character` or `/mud char` - Customize your character (class, race, gender)\n");
+    help_text.push_str("• `/mud say <message>` - Say something to everyone in the room\n");
+    help_text.push_str("• `/mud tell <player> <message>` - Send a private message to another player\n");
+    help_text.push_str("• `/mud shout <message>` - Shout a message to all players\n");
     help_text.push_str("• `/mud socials` - List all available social commands\n");
     help_text.push_str("• `/mud <social> [player]` - Perform a social action (e.g., `/mud smile` or `/mud hug bob`)\n");
 

@@ -93,6 +93,14 @@ impl PlayerRepository {
         .await
     }
 
+    pub async fn get_all_players(&self) -> Result<Vec<Player>, sqlx::Error> {
+        sqlx::query_as::<_, Player>(
+            "SELECT * FROM players ORDER BY name"
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
     pub async fn is_name_taken(&self, name: &str) -> Result<bool, sqlx::Error> {
         let result: Option<(bool,)> = sqlx::query_as(
             "SELECT EXISTS(SELECT 1 FROM players WHERE LOWER(name) = LOWER($1))"
