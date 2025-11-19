@@ -62,6 +62,22 @@ pub async fn handle_attach(state: Arc<AppState>, command: SlashCommand, args: &s
     // Get room info for confirmation
     let room = room_repo.get_by_channel_id(&current_room_id).await?;
     let room_name = room.as_ref().map(|r| r.channel_name.as_str()).unwrap_or("current room");
+    let room_description = room.as_ref().map(|r| r.description.as_str()).unwrap_or("");
+
+    // Post dramatic message to the attached channel
+    let dramatic_message = format!(
+        "_Reality bends and twists as ancient magic takes hold..._\n\n_You feel the veil between dimensions shimmer and part. Another world merges with your own._\n\n*{}* _materializes from the ethereal mists, its essence now intertwined with this space._\n\n_{}_",
+        room_name,
+        room_description.lines().next().unwrap_or("A mysterious presence fills the air.")
+    );
+
+    let _ = state.slack_client.post_message_with_username(
+        &slack_channel_id,
+        &dramatic_message,
+        None,
+        Some("The Weave".to_string()),
+        Some(":crystal_ball:".to_string()),
+    ).await;
 
     state.slack_client.send_dm(
         &command.user_id,
@@ -100,12 +116,29 @@ pub async fn handle_detach(state: Arc<AppState>, command: SlashCommand) -> Resul
         }
     };
 
-    // Detach the room
-    room_repo.detach_from_channel(&current_room_id).await?;
-
-    // Get room info for confirmation
+    // Get room info before detaching (to know which channel to post to)
     let room = room_repo.get_by_channel_id(&current_room_id).await?;
     let room_name = room.as_ref().map(|r| r.channel_name.as_str()).unwrap_or("current room");
+    let attached_channel = room.as_ref().and_then(|r| r.attached_channel_id.clone());
+
+    // Post dramatic departure message to the attached channel (if it exists)
+    if let Some(channel_id) = attached_channel {
+        let departure_message = format!(
+            "_The mystical connection wavers and fades..._\n\n_You feel the presence of another world withdraw. *{}* dissolves back into the ethereal mists, leaving only a faint echo of its existence._",
+            room_name
+        );
+
+        let _ = state.slack_client.post_message_with_username(
+            &channel_id,
+            &departure_message,
+            None,
+            Some("The Weave".to_string()),
+            Some(":crystal_ball:".to_string()),
+        ).await;
+    }
+
+    // Detach the room
+    room_repo.detach_from_channel(&current_room_id).await?;
 
     state.slack_client.send_dm(
         &command.user_id,
@@ -173,6 +206,22 @@ pub async fn handle_attach_dm(
     // Get room info for confirmation
     let room = room_repo.get_by_channel_id(&current_room_id).await?;
     let room_name = room.as_ref().map(|r| r.channel_name.as_str()).unwrap_or("current room");
+    let room_description = room.as_ref().map(|r| r.description.as_str()).unwrap_or("");
+
+    // Post dramatic message to the attached channel
+    let dramatic_message = format!(
+        "_Reality bends and twists as ancient magic takes hold..._\n\n_You feel the veil between dimensions shimmer and part. Another world merges with your own._\n\n*{}* _materializes from the ethereal mists, its essence now intertwined with this space._\n\n_{}_",
+        room_name,
+        room_description.lines().next().unwrap_or("A mysterious presence fills the air.")
+    );
+
+    let _ = state.slack_client.post_message_with_username(
+        &slack_channel_id,
+        &dramatic_message,
+        None,
+        Some("The Weave".to_string()),
+        Some(":crystal_ball:".to_string()),
+    ).await;
 
     state.slack_client.send_dm(
         &user_id,
@@ -214,12 +263,29 @@ pub async fn handle_detach_dm(
         }
     };
 
-    // Detach the room
-    room_repo.detach_from_channel(&current_room_id).await?;
-
-    // Get room info for confirmation
+    // Get room info before detaching (to know which channel to post to)
     let room = room_repo.get_by_channel_id(&current_room_id).await?;
     let room_name = room.as_ref().map(|r| r.channel_name.as_str()).unwrap_or("current room");
+    let attached_channel = room.as_ref().and_then(|r| r.attached_channel_id.clone());
+
+    // Post dramatic departure message to the attached channel (if it exists)
+    if let Some(channel_id) = attached_channel {
+        let departure_message = format!(
+            "_The mystical connection wavers and fades..._\n\n_You feel the presence of another world withdraw. *{}* dissolves back into the ethereal mists, leaving only a faint echo of its existence._",
+            room_name
+        );
+
+        let _ = state.slack_client.post_message_with_username(
+            &channel_id,
+            &departure_message,
+            None,
+            Some("The Weave".to_string()),
+            Some(":crystal_ball:".to_string()),
+        ).await;
+    }
+
+    // Detach the room
+    room_repo.detach_from_channel(&current_room_id).await?;
 
     state.slack_client.send_dm(
         &user_id,
