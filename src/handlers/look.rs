@@ -660,7 +660,7 @@ async fn handle_look_at_self(
     };
 
     let third_person = format!("_{} looks at {}._", player.name, reflexive);
-    let first_person = format!("_You look at {}._", reflexive);
+    let first_person = "_You look at yourself._".to_string();
 
     super::broadcast_room_action(
         &state,
