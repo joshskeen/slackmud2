@@ -288,13 +288,27 @@ async fn handle_message_event(
         "help" | "h" => {
             handle_help_dm(state.clone(), user_id.clone()).await
         }
+        "socials" => {
+            handle_socials_list_dm(state.clone(), user_id.clone()).await
+        }
         _ => {
-            // Unknown command
-            let help_text = format!(
-                "Unknown command: `{}`. Try:\n• `look` - Look around\n• `n/s/e/w/u/d` - Move in a direction\n• `get <item>` - Pick up an item\n• `drop <item>` - Drop an item\n• `inventory` - Show what you're carrying\n• `exits` - Show available exits\n• `character` - View character\n• `help` - Show help",
-                command
-            );
-            state.slack_client.send_dm(&user_id, &help_text).await
+            // Check if it's a social command
+            if crate::social::get_social(&command).is_some() {
+                super::social::handle_social_dm(
+                    state.clone(),
+                    user_id.clone(),
+                    user_name,
+                    &command,
+                    _args,
+                ).await
+            } else {
+                // Unknown command
+                let help_text = format!(
+                    "Unknown command: `{}`. Try:\n• `look` - Look around\n• `n/s/e/w/u/d` - Move in a direction\n• `get <item>` - Pick up an item\n• `drop <item>` - Drop an item\n• `inventory` - Show what you're carrying\n• `exits` - Show available exits\n• `character` - View character\n• `socials` - List all social commands\n• `help` - Show help",
+                    command
+                );
+                state.slack_client.send_dm(&user_id, &help_text).await
+            }
         }
     };
 
@@ -378,6 +392,8 @@ async fn handle_help_dm(state: Arc<AppState>, user_id: String) -> anyhow::Result
     help_text.push_str("• `drop <item>` - Drop an item\n");
     help_text.push_str("• `inventory` or `i` - Show what you're carrying\n");
     help_text.push_str("• `character` or `c` - View your character info\n");
+    help_text.push_str("• `socials` - List all available social commands\n");
+    help_text.push_str("• `<social> [player]` - Perform a social action (e.g., `smile` or `hug bob`)\n");
 
     if is_wizard {
         help_text.push_str("\n*Wizard Commands:*\n");
@@ -394,5 +410,32 @@ async fn handle_help_dm(state: Arc<AppState>, user_id: String) -> anyhow::Result
     help_text.push_str("\nYou can also use `/mud` slash commands in any channel!");
 
     state.slack_client.send_dm(&user_id, &help_text).await?;
+    Ok(())
+}
+
+async fn handle_socials_list_dm(state: Arc<AppState>, user_id: String) -> anyhow::Result<()> {
+    let social_names = crate::social::get_all_social_names();
+
+    let mut message = String::from("*Available Social Commands:*\n\n");
+    message.push_str("Use `<social>` or `<social> <player>` to perform these actions:\n\n");
+
+    // Display in columns
+    let mut col = 0;
+    for name in &social_names {
+        message.push_str(&format!("{:<15}", name));
+        col += 1;
+        if col >= 4 {
+            message.push('\n');
+            col = 0;
+        }
+    }
+
+    if col > 0 {
+        message.push('\n');
+    }
+
+    message.push_str(&format!("\n_Total: {} social commands available_", social_names.len()));
+
+    state.slack_client.send_dm(&user_id, &message).await?;
     Ok(())
 }
