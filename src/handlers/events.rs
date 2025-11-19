@@ -253,6 +253,14 @@ async fn handle_message_event(
                 _args,
             ).await
         }
+        "listitems" => {
+            super::import::handle_listitems_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                _args,
+            ).await
+        }
         "teleport" | "tp" => {
             super::teleport::handle_teleport_dm(
                 state.clone(),
@@ -402,6 +410,8 @@ async fn handle_help_dm(state: Arc<AppState>, user_id: String) -> anyhow::Result
         help_text.push_str("• `detach` - Detach current room from its Slack channel\n");
         help_text.push_str("• `import-area <url>` - Import MUD area file (creates virtual rooms)\n");
         help_text.push_str("• `vnums [page]` - List all imported virtual rooms\n");
+        help_text.push_str("• `listitems [page]` - List all unique item definitions\n");
+        help_text.push_str("• `manifest <vnum|name>` - Magically create an item in the room\n");
         help_text.push_str("• `teleport <vnum>` - Teleport yourself to a room\n");
         help_text.push_str("• `teleport <player> <vnum>` - Teleport another player to a room\n");
     }
