@@ -68,6 +68,25 @@ pub async fn handle_attach(state: Arc<AppState>, command: SlashCommand, args: &s
         return Ok(());
     };
 
+    // Try to join the channel first (for public channels)
+    match state.slack_client.join_channel(&slack_channel_id).await {
+        Ok(_) => {
+            tracing::info!("Bot successfully joined channel '{}'", slack_channel_id);
+        }
+        Err(e) => {
+            // If it's a private channel or already joined, that's okay
+            let error_msg = format!("{}", e);
+            if error_msg.contains("already_in_channel") {
+                tracing::info!("Bot is already in channel '{}'", slack_channel_id);
+            } else if error_msg.contains("is_private") || error_msg.contains("channel_not_found") {
+                // Note: Can't auto-join private channels - user must invite bot manually
+                tracing::warn!("Cannot auto-join private channel or channel not found: {}", slack_channel_id);
+            } else {
+                tracing::warn!("Failed to join channel '{}': {}", slack_channel_id, e);
+            }
+        }
+    }
+
     // Attach the room
     room_repo.attach_to_channel(&current_room_id, &slack_channel_id).await?;
     tracing::info!(
@@ -237,6 +256,25 @@ pub async fn handle_attach_dm(
         ).await?;
         return Ok(());
     };
+
+    // Try to join the channel first (for public channels)
+    match state.slack_client.join_channel(&slack_channel_id).await {
+        Ok(_) => {
+            tracing::info!("Bot successfully joined channel '{}'", slack_channel_id);
+        }
+        Err(e) => {
+            // If it's a private channel or already joined, that's okay
+            let error_msg = format!("{}", e);
+            if error_msg.contains("already_in_channel") {
+                tracing::info!("Bot is already in channel '{}'", slack_channel_id);
+            } else if error_msg.contains("is_private") || error_msg.contains("channel_not_found") {
+                // Note: Can't auto-join private channels - user must invite bot manually
+                tracing::warn!("Cannot auto-join private channel or channel not found: {}", slack_channel_id);
+            } else {
+                tracing::warn!("Failed to join channel '{}': {}", slack_channel_id, e);
+            }
+        }
+    }
 
     // Attach the room
     room_repo.attach_to_channel(&current_room_id, &slack_channel_id).await?;

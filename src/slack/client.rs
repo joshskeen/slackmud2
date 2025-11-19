@@ -151,4 +151,32 @@ impl SlackClient {
 
         Ok(real_name)
     }
+
+    /// Join a public channel (bot must have channels:join scope)
+    pub async fn join_channel(&self, channel_id: &str) -> Result<()> {
+        tracing::info!("Attempting to join channel '{}'", channel_id);
+
+        let response = self
+            .client
+            .post("https://slack.com/api/conversations.join")
+            .header("Authorization", format!("Bearer {}", self.bot_token))
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "channel": channel_id
+            }))
+            .send()
+            .await
+            .context("Failed to join channel")?;
+
+        let json: serde_json::Value = response.json().await?;
+
+        if !json["ok"].as_bool().unwrap_or(false) {
+            let error = json["error"].as_str().unwrap_or("unknown");
+            tracing::warn!("Failed to join channel '{}': {}", channel_id, error);
+            anyhow::bail!("Slack API error: {}", error);
+        }
+
+        tracing::info!("Successfully joined channel '{}'", channel_id);
+        Ok(())
+    }
 }
