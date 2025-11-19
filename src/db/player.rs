@@ -106,9 +106,9 @@ impl PlayerRepository {
 
     pub async fn delete_all(&self) -> Result<(), sqlx::Error> {
         // Delete in order to respect foreign key constraints
-        // 1. Delete player inventory and equipment (object instances owned by players)
-        //    Equipment is tracked in object_instances with equipped_slot set
-        sqlx::query("DELETE FROM object_instances WHERE owner_id IS NOT NULL")
+        // 1. Delete player inventory and equipment (object instances in player possession)
+        //    location_type 'player' = in inventory, 'equipped' = equipped on player
+        sqlx::query("DELETE FROM object_instances WHERE location_type IN ('player', 'equipped')")
             .execute(&self.pool)
             .await?;
 
