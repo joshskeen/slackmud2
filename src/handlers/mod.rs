@@ -103,6 +103,7 @@ pub async fn handle_slash_command(
         "detach" => attach::handle_detach(state, command.clone()).await,
         "import-area" => import::handle_import_area(state, command.clone(), args).await,
         "vnums" => import::handle_vnums(state, command.clone(), args).await,
+        "listitems" => import::handle_listitems(state, command.clone(), args).await,
         "teleport" | "tp" => teleport::handle_teleport(state, command.clone(), args).await,
         "move" | "go" | "m" => r#move::handle_move(state, command.clone(), args).await,
         // Directional shortcuts
@@ -214,6 +215,7 @@ async fn handle_help(state: Arc<AppState>, command: SlashCommand) -> anyhow::Res
         help_text.push_str("• `/mud detach` - Detach current room from its Slack channel\n");
         help_text.push_str("• `/mud import-area <url>` - Import MUD area file (creates virtual rooms)\n");
         help_text.push_str("• `/mud vnums [page]` - List all imported virtual rooms\n");
+        help_text.push_str("• `/mud listitems [page]` - List all unique item definitions\n");
         help_text.push_str("• `/mud teleport <vnum>` - Teleport yourself to a room\n");
         help_text.push_str("• `/mud teleport <player> <vnum>` - Teleport another player to a room\n");
     }

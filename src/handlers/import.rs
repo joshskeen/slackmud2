@@ -412,8 +412,6 @@ pub async fn handle_vnums_dm(
 }
 
 async fn list_virtual_rooms(state: Arc<AppState>) -> Result<Vec<crate::models::Room>> {
-    use sqlx::Row;
-
     // Query all rooms where channel_id starts with "vnum_"
     let rooms = sqlx::query_as::<_, crate::models::Room>(
         "SELECT * FROM rooms WHERE channel_id LIKE 'vnum_%' ORDER BY channel_id"
@@ -433,4 +431,91 @@ async fn fetch_area_file(url: &str) -> Result<String> {
 
     let content = response.text().await?;
     Ok(content)
+}
+
+pub async fn handle_listitems(state: Arc<AppState>, command: SlashCommand, args: &str) -> Result<()> {
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+
+    // Get player
+    let real_name = state.slack_client.get_user_real_name(&command.user_id).await?;
+    let player = player_repo.get_or_create(command.user_id.clone(), real_name).await?;
+
+    // Check if player is a wizard
+    if player.level < WIZARD_LEVEL {
+        state.slack_client.send_dm(
+            &command.user_id,
+            &format!("You must be a wizard (level {}) to list items.", WIZARD_LEVEL)
+        ).await?;
+        return Ok(());
+    }
+
+    // Parse page number from args (default to 1)
+    let page: usize = args.trim().parse().unwrap_or(1).max(1);
+    const PAGE_SIZE: usize = 20;
+
+    // Fetch all objects
+    let objects = list_all_objects(state.clone()).await?;
+
+    if objects.is_empty() {
+        state.slack_client.send_dm(
+            &command.user_id,
+            "No items found. Use `/mud import-area <url>` to import an area file with objects."
+        ).await?;
+        return Ok(());
+    }
+
+    // Calculate pagination
+    let total_objects = objects.len();
+    let total_pages = (total_objects + PAGE_SIZE - 1) / PAGE_SIZE;
+    let start_idx = (page - 1) * PAGE_SIZE;
+    let end_idx = (start_idx + PAGE_SIZE).min(total_objects);
+
+    if start_idx >= total_objects {
+        state.slack_client.send_dm(
+            &command.user_id,
+            &format!("Page {} not found. Total pages: {}", page, total_pages)
+        ).await?;
+        return Ok(());
+    }
+
+    // Build the list message
+    let mut message = format!("*Items (Page {} of {})*\n", page, total_pages);
+    message.push_str(&format!("_Total items: {}_\n\n", total_objects));
+
+    for (idx, object) in objects.iter().enumerate().skip(start_idx).take(PAGE_SIZE) {
+        if idx >= end_idx {
+            break;
+        }
+
+        // Display vnum, short description, type, and level
+        message.push_str(&format!(
+            "• `{}` - {} [{}{}]\n",
+            object.vnum,
+            object.short_description,
+            object.item_type,
+            if object.level > 0 {
+                format!(", lvl {}", object.level)
+            } else {
+                String::new()
+            }
+        ));
+    }
+
+    if total_pages > 1 {
+        message.push_str(&format!("\n_Use `/mud listitems {}` for next page_", page + 1));
+    }
+
+    state.slack_client.send_dm(&command.user_id, &message).await?;
+    Ok(())
+}
+
+async fn list_all_objects(state: Arc<AppState>) -> Result<Vec<crate::models::Object>> {
+    // Query all objects ordered by vnum
+    let objects = sqlx::query_as::<_, crate::models::Object>(
+        "SELECT * FROM objects ORDER BY vnum"
+    )
+    .fetch_all(&state.db_pool)
+    .await?;
+
+    Ok(objects)
 }
