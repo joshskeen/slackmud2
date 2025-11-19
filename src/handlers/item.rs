@@ -517,3 +517,95 @@ async fn find_object_by_keyword(
 
     Ok(None)
 }
+
+pub async fn handle_manifest_dm(
+    state: Arc<AppState>,
+    user_id: String,
+    user_name: String,
+    args: &str,
+) -> Result<()> {
+    let player_repo = PlayerRepository::new(state.db_pool.clone());
+    let object_repo = ObjectRepository::new(state.db_pool.clone());
+    let object_instance_repo = ObjectInstanceRepository::new(state.db_pool.clone());
+
+    // Get player
+    let player = player_repo.get_or_create(user_id.clone(), user_name).await?;
+
+    // Check if player is a wizard
+    if player.level < WIZARD_LEVEL {
+        state.slack_client.send_dm(
+            &user_id,
+            &format!("You must be a wizard (level {}) to manifest items.", WIZARD_LEVEL)
+        ).await?;
+        return Ok(());
+    }
+
+    // Check if player has a current room
+    let room_id = match player.current_channel_id {
+        Some(id) => id,
+        None => {
+            state.slack_client.send_dm(
+                &user_id,
+                "You need to be in a room first! Use `look` to enter a room."
+            ).await?;
+            return Ok(());
+        }
+    };
+
+    let search_term = args.trim();
+    if search_term.is_empty() {
+        state.slack_client.send_dm(
+            &user_id,
+            "Usage: `manifest <vnum|name>`\nExample: `manifest 3001` or `manifest sword`"
+        ).await?;
+        return Ok(());
+    }
+
+    // Try to parse as vnum first
+    let object = if let Ok(vnum) = search_term.parse::<i32>() {
+        object_repo.get_by_vnum(vnum).await?
+    } else {
+        // Search by keyword in all objects
+        find_object_by_keyword(&object_repo, search_term).await?
+    };
+
+    match object {
+        Some(obj) => {
+            // Create object instance in the room
+            let instance = crate::models::ObjectInstance::new_in_room(obj.vnum, room_id.clone());
+            object_instance_repo.create(&instance).await?;
+
+            // Send success message to wizard
+            state.slack_client.send_dm(
+                &user_id,
+                &format!("You manifest {}.", obj.short_description)
+            ).await?;
+
+            // Broadcast dramatic action to room
+            let third_person = format!(
+                "_{} utters a strange incantation and performs a series of hand gestures. {} springs into existence!_",
+                player.name,
+                obj.short_description
+            );
+            let first_person = format!(
+                "_You utter a strange incantation and perform a series of hand gestures. {} springs into existence!_",
+                obj.short_description
+            );
+            super::broadcast_room_action(
+                &state,
+                &room_id,
+                &third_person,
+                Some(&user_id),
+                Some(&first_person),
+            ).await?;
+        }
+        None => {
+            state.slack_client.send_dm(
+                &user_id,
+                &format!("No item found matching '{}'. Use `listitems` to see available items.", search_term)
+            ).await?;
+        }
+    }
+
+    Ok(())
+}

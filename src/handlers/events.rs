@@ -293,6 +293,14 @@ async fn handle_message_event(
                 user_name,
             ).await
         }
+        "manifest" => {
+            super::item::handle_manifest_dm(
+                state.clone(),
+                user_id.clone(),
+                user_name,
+                _args,
+            ).await
+        }
         "help" | "h" => {
             handle_help_dm(state.clone(), user_id.clone()).await
         }
